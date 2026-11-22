@@ -150,3 +150,36 @@ func TestLoadConfigBadTimeout(t *testing.T) {
 		}
 	}
 }
+
+// TestInstancePasswordPrefersDirect 配置契约保存的密码优先于环境变量。
+func TestInstancePasswordPrefersDirect(t *testing.T) {
+	password, err := instancePassword(InstanceConfig{Name: "default", Password: "direct", PasswordEnv: "KORE_TEST_UNSET_PASSWORD"})
+	if err != nil || password != "direct" {
+		t.Fatalf("直接密码未生效: %q %v", password, err)
+	}
+	t.Setenv("KORE_TEST_ENV_PASSWORD", "from-env")
+	password, err = instancePassword(InstanceConfig{Name: "default", PasswordEnv: "KORE_TEST_ENV_PASSWORD"})
+	if err != nil || password != "from-env" {
+		t.Fatalf("环境变量密码未生效: %q %v", password, err)
+	}
+}
+
+// TestDatabasesIncludeSystemDefault 请求未显式传 include_system 时用配置默认值。
+func TestDatabasesIncludeSystemDefault(t *testing.T) {
+	cfg := callTestConfig()
+	cfg.IncludeSystem = true
+	exec := &fakeExecutor{}
+	if _, perr := callDatabases([]byte(`{"instance":"primary"}`), cfg, exec); perr != nil {
+		t.Fatalf("databases 失败: %v", perr)
+	}
+	if !exec.lastInclude {
+		t.Fatal("配置的 databases_include_system 未作为默认值")
+	}
+	exec = &fakeExecutor{}
+	if _, perr := callDatabases([]byte(`{"instance":"primary","include_system":false}`), cfg, exec); perr != nil {
+		t.Fatalf("databases 失败: %v", perr)
+	}
+	if exec.lastInclude {
+		t.Fatal("请求显式 include_system=false 未覆盖配置默认值")
+	}
+}

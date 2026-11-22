@@ -16,7 +16,11 @@ func callDatabases(raw json.RawMessage, cfg Config, exec Executor) (json.RawMess
 	if perr != nil {
 		return nil, perr
 	}
-	databases, err := exec.Databases(instance, p.IncludeSystem)
+	includeSystem := cfg.IncludeSystem
+	if p.IncludeSystem != nil {
+		includeSystem = *p.IncludeSystem
+	}
+	databases, err := exec.Databases(instance, includeSystem)
 	if err != nil {
 		return nil, classify(err)
 	}

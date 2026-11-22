@@ -15,6 +15,21 @@ MySQL/MariaDB 管理插件：真实探测实例、列库、执行只读查询、
 - 能力声明：`system:admin`；与 `db-postgres` 互斥
 - 握手与响应帧走 stdout，日志一律写 stderr
 
+## 配置契约（`db-mysql.config.get` / `db-mysql.config.set`）
+
+遵循 `kore/docs/PLUGIN-CONFIG.md`：存储 `<KORE_STATE_DIR>/config.json`（0600 原子写），优先级 **config.json > 环境变量 > 代码默认值**，保存后同一进程内下一次调用立即生效（`restart_required=false`）。这份配置只描述**默认实例**（实例名 `default`），旧的多实例路径继续生效，两者同时存在时 default 由配置文件覆盖。
+
+| 字段 | 类型 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `host` | string | `127.0.0.1` | 默认实例主机名/IP |
+| `port` | int | `3306` | 默认实例端口 |
+| `user` | string | `root` | 默认实例用户名 |
+| `password` | string（sensitive） | `""` | 密码，只存本机 0600 文件；`config.get` 只回 `***` |
+| `password_env` | string | `KORE_MYSQL_PASSWORD` | 密码环境变量名；`password` 优先 |
+| `databases_include_system` | bool | `false` | 库列表默认是否包含系统库 |
+
+环境变量兜底（仅当配置文件不存在时生效）：`KORE_MYSQL_HOST`、`KORE_MYSQL_PORT`、`KORE_MYSQL_USER`、`KORE_MYSQL_PASSWORD_ENV`、`KORE_MYSQL_DATABASES_INCLUDE_SYSTEM`。
+
 ## 实例配置
 
 按优先级读取（三处都没有时视为「未配置实例」，方法返回空列表/`E_NOTFOUND`，插件仍可启动）：
@@ -34,8 +49,9 @@ MySQL/MariaDB 管理插件：真实探测实例、列库、执行只读查询、
 
 - `name`：小写字母/数字开头，仅含小写字母、数字、`.`、`-`，≤64 字符；不得重复
 - `host` / `user`：拒绝空白、控制字符与 `-` 开头（防止被 mysql 客户端当成 argv 选项）
-- `password_env`：**密码只从该环境变量读取**，配置里不出现密码值；未声明时不带密码
-- 未知字段（例如误写 `"password": "..."`）直接报错，避免明文密码被静默忽略
+- `password_env`：密码环境变量名；旧多实例路径仍不保存密码值，未声明时不带密码
+- 未知字段（例如在 `KORE_MYSQL_INSTANCES` 里误写 `"password": "..."`）直接报错，避免明文密码被静默忽略；默认实例的密码走 `config.json` 的 `password` 字段
+- `databases_include_system` 只来自配置契约 / `KORE_MYSQL_DATABASES_INCLUDE_SYSTEM`；`db-mysql.databases` 请求里的 `include_system` 仍可逐次覆盖
 - 配置非法不会让插件启动失败：MySQL 方法统一返回 `E_INVALID`，`kore.ping` 仍可用
 
 ## 方法

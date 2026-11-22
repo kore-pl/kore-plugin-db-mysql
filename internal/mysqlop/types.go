@@ -37,14 +37,17 @@ func NewFaultError(kind FaultKind, message string) *FaultError {
 	return &FaultError{Kind: kind, Message: message}
 }
 
-// InstanceConfig 是一条实例配置。密码只以环境变量名（PasswordEnv）出现，
-// 结构体本身不携带明文密码，也不允许密码进入 argv 或返回值。
+// InstanceConfig 是一条实例配置。密码可以来自配置契约（Password，仅默认实例）
+// 或环境变量名（PasswordEnv）；两者都不会进入 argv 或任何响应。
 type InstanceConfig struct {
 	Name        string `json:"name"`
 	Host        string `json:"host"`
 	Port        int    `json:"port"`
 	User        string `json:"user"`
 	PasswordEnv string `json:"password_env"`
+	// Password 是配置契约直接保存的密码（仅默认实例使用）；json:"-" 保证它
+	// 不会出现在任何响应里，也不接受 KORE_MYSQL_INSTANCES 的 password 字段。
+	Password string `json:"-"`
 }
 
 // InstanceStatus 是 db-mysql.instances 的单实例结果。Error 为空串表示探测成功。
@@ -62,6 +65,8 @@ type Config struct {
 	Instances []InstanceConfig
 	Bin       string
 	Timeout   time.Duration
+	// IncludeSystem 是 db-mysql.databases 未显式传 include_system 时的默认值。
+	IncludeSystem bool
 	// Err 是配置解析错误；非 nil 时所有业务方法返回 E_INVALID，但插件仍可启动。
 	Err error
 }
@@ -118,7 +123,7 @@ type instancesParams struct {
 // databasesParams 是 db-mysql.databases 的显式入参形状。
 type databasesParams struct {
 	Instance      string `json:"instance"`
-	IncludeSystem bool   `json:"include_system"`
+	IncludeSystem *bool  `json:"include_system"`
 }
 
 // queryParams 是 db-mysql.query 的显式入参形状。

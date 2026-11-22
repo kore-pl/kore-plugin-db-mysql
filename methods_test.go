@@ -14,7 +14,8 @@ func TestDispatchMethods(t *testing.T) {
 		Type: pluginapi.TypeRequest, ID: "id", ReqID: "r",
 		Method: "db-mysql.instances", Params: json.RawMessage(`{}`),
 	}
-	resp, shutdown := dispatch(req, testConfig(), testLogger())
+	cfg := testConfig()
+	resp, shutdown := dispatch(req, &cfg, testLogger())
 	if shutdown {
 		t.Fatal("db-mysql.instances 不应触发 shutdown")
 	}
@@ -42,11 +43,12 @@ func TestDispatchReject(t *testing.T) {
 		{"db-mysql.slowQueries", `{"instance":"primary"}`, pluginapi.E_NOTFOUND},
 	}
 	for _, c := range cases {
+		cfg := testConfig()
 		req := &pluginapi.Request{
 			Type: pluginapi.TypeRequest, ID: "id", ReqID: "r",
 			Method: c.method, Params: json.RawMessage(c.params),
 		}
-		resp, _ := dispatch(req, testConfig(), testLogger())
+		resp, _ := dispatch(req, &cfg, testLogger())
 		if resp.Error == nil || resp.Error.Code != c.code {
 			t.Fatalf("%s %s 错误=%v，期望 %q", c.method, c.params, resp.Error, c.code)
 		}
@@ -64,7 +66,7 @@ func TestDispatchConfigInvalid(t *testing.T) {
 		Type: pluginapi.TypeRequest, ID: "id", ReqID: "r",
 		Method: "db-mysql.instances", Params: json.RawMessage(`{}`),
 	}
-	resp, _ := dispatch(req, cfg, testLogger())
+	resp, _ := dispatch(req, &cfg, testLogger())
 	if resp.Error == nil || resp.Error.Code != pluginapi.E_INVALID {
 		t.Fatalf("错误=%v，期望 E_INVALID", resp.Error)
 	}
@@ -77,8 +79,9 @@ func (e *configError) Error() string { return e.msg }
 
 // TestPingResult kore.ping 返回 ready 状态。
 func TestPingResult(t *testing.T) {
+	cfg := testConfig()
 	req := &pluginapi.Request{Type: pluginapi.TypeRequest, ID: "id", ReqID: "r", Method: "kore.ping"}
-	resp, _ := dispatch(req, testConfig(), testLogger())
+	resp, _ := dispatch(req, &cfg, testLogger())
 	if !strings.Contains(string(resp.Result), `"status":"ready"`) {
 		t.Fatalf("ping 结果=%s", resp.Result)
 	}

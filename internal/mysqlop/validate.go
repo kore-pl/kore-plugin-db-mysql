@@ -32,6 +32,23 @@ func ValidateInstance(name string) error {
 	return validateInstanceName(name)
 }
 
+// ValidateHost 供配置契约校验默认实例主机（与实例解析共用同一套规则）。
+func ValidateHost(host string) error { return validateHost(host) }
+
+// ValidateUser 供配置契约校验默认实例用户名。
+func ValidateUser(user string) error { return validateUser(user) }
+
+// ValidatePasswordEnv 供配置契约校验密码环境变量名。
+func ValidatePasswordEnv(name string) error {
+	if name == "" {
+		return errors.New("环境变量名不得为空")
+	}
+	if !passwordEnvRE.MatchString(name) {
+		return errors.New("环境变量名非法：须以字母/下划线开头，仅含字母、数字、下划线")
+	}
+	return nil
+}
+
 // validateInstanceName 校验实例名，配置解析与请求参数共用。
 func validateInstanceName(name string) error {
 	if name == "" {

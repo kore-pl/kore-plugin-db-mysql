@@ -32,9 +32,22 @@ const (
 	maxInstances   = 64
 )
 
-// LoadConfig 读取运行期配置。配置缺失返回空实例列表；配置非法返回错误，
-// 由调用方转成 E_INVALID，而不是让插件进程启动失败。
+// LoadConfig 读取旧多实例路径与客户端参数。配置缺失返回空实例列表；
+// 配置非法返回错误，由调用方转成 E_INVALID，而不是让插件进程启动失败。
 func LoadConfig() (Config, error) {
+	bin, timeout, err := LoadClient()
+	if err != nil {
+		return Config{}, err
+	}
+	instances, err := LoadEnvInstances()
+	if err != nil {
+		return Config{}, err
+	}
+	return Config{Instances: instances, Bin: bin, Timeout: timeout}, nil
+}
+
+// LoadClient 读取 mysql 客户端路径与命令超时（KORE_MYSQL_BIN / KORE_MYSQL_TIMEOUT）。
+func LoadClient() (string, time.Duration, error) {
 	bin := strings.TrimSpace(os.Getenv(EnvBin))
 	if bin == "" {
 		bin = defaultBin
@@ -43,20 +56,25 @@ func LoadConfig() (Config, error) {
 	if raw := strings.TrimSpace(os.Getenv(EnvTimeout)); raw != "" {
 		parsed, err := time.ParseDuration(raw)
 		if err != nil || parsed <= 0 || parsed > maxTimeout {
-			return Config{}, fmt.Errorf("%s=%q 非法：须为 (0, %s] 的 Go 时长（如 15s）", EnvTimeout, raw, maxTimeout)
+			return "", 0, fmt.Errorf("%s=%q 非法：须为 (0, %s] 的 Go 时长（如 15s）", EnvTimeout, raw, maxTimeout)
 		}
 		timeout = parsed
 	}
+	return bin, timeout, nil
+}
 
+// LoadEnvInstances 读取 KORE_MYSQL_INSTANCES / KORE_MYSQL_CONFIG / <root>/instances.json
+// 这条旧多实例路径；三处都没有时返回空列表。
+func LoadEnvInstances() ([]InstanceConfig, error) {
 	raw, source, err := instancesSource()
 	if err != nil {
-		return Config{}, err
+		return nil, err
 	}
 	instances, err := ParseInstances(raw)
 	if err != nil {
-		return Config{}, fmt.Errorf("解析实例配置（%s）: %w", source, err)
+		return nil, fmt.Errorf("解析实例配置（%s）: %w", source, err)
 	}
-	return Config{Instances: instances, Bin: bin, Timeout: timeout}, nil
+	return instances, nil
 }
 
 // instancesSource 按优先级取出配置原文；三处都没有时返回空数组。
@@ -163,9 +181,12 @@ func normalizeInstance(ic *InstanceConfig) error {
 	return nil
 }
 
-// instancePassword 从实例声明的环境变量读取密码；未声明 password_env 时返回空串。
-// 返回的错误只包含变量名，不包含变量值。
+// instancePassword 优先使用配置契约直接保存的密码（仅默认实例），否则从实例声明的
+// 环境变量读取；两者都没有时返回空串。返回的错误只包含变量名，不包含变量值。
 func instancePassword(ic InstanceConfig) (string, error) {
+	if ic.Password != "" {
+		return ic.Password, nil
+	}
 	if ic.PasswordEnv == "" {
 		return "", nil
 	}
