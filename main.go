@@ -1,7 +1,8 @@
-// Package main 是 kore 的 db-mysql 插件：MySQL/MariaDB 管理的方法面骨架。
+// Package main 是 kore 的 db-mysql 插件：MySQL/MariaDB 管理的方法面。
 //
-// db-mysql 只做协议握手 + 参数校验 + 结构化结果，不真连数据库、
-// 不内置 mysql/mysqldump/mariadb 等任何客户端二进制（裁决37 / 提案 §2.1 批2）。
+// db-mysql 负责协议握手、参数校验、只读 SQL 白名单，并通过本机 mysql 客户端
+// （os/exec）真实探测实例、列库、查询与读状态；不引入 MySQL driver、
+// 不内置 mysql/mysqldump/mariadb 等任何客户端二进制（G-17 / 裁决37）。
 //
 // 协议面（kore.plugin.v1）：UDS → kore.hello 握手 → 会话循环读 request、
 // 按 method 分发并回 response；stdout 留给协议，日志一律写 stderr。

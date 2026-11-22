@@ -1,4 +1,4 @@
-# kore-plugin-db-mysql 构建入口：build / dist / check / clean。
+# kore-plugin-db-mysql 构建入口：build / dist / check / e2e / clean。
 SHELL := /bin/bash
 
 ID := db-mysql
@@ -7,7 +7,7 @@ DIST := dist
 VERSION := $(shell sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' info.json | head -n 1)
 PACKAGE := $(DIST)/$(ID)-$(VERSION).tar.gz
 
-.PHONY: build dist check clean
+.PHONY: build dist check e2e clean
 
 # 静态构建：G-16 兼容性基线（CGO_ENABLED=0 + GOAMD64=v1 + trimpath + -s -w）。
 build:
@@ -47,6 +47,11 @@ check:
 	@out="$$(gofmt -l .)"; if [ -n "$$out" ]; then echo "gofmt 需要格式化："; echo "$$out"; exit 1; fi; echo "gofmt: clean"
 	go vet ./...
 	go test -timeout 200s ./...
+
+# 真实 MySQL E2E：需先按 README 启动容器并导出 KORE_MYSQL_INSTANCES / 密码环境变量。
+e2e:
+	@test -n "$$KORE_MYSQL_INSTANCES" || { echo "需设置 KORE_MYSQL_INSTANCES 与密码环境变量（见 README）"; exit 1; }
+	KORE_MYSQL_E2E=1 go test -timeout 120s -v ./tests/e2e
 
 clean:
 	rm -rf bin dist

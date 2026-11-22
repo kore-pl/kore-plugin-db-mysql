@@ -19,7 +19,6 @@ func testConfig() config {
 		version:      "0.1.0",
 		requiresKore: ">=0.1.0 <0.2.0",
 		capabilities: []string{"system:admin"},
-		instanceRoot: "/var/lib/kore/db-mysql",
 		startedAt:    time.Now(),
 	}
 }
@@ -127,11 +126,18 @@ func TestServeBusinessMethods(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- serve(pluginConn, testConfig(), testLogger()); _ = pluginConn.Close() }()
 
-	for i, method := range []string{"mysql.instances", "mysql.slowQueries"} {
+	cases := []struct {
+		method string
+		params string
+	}{
+		{"mysql.instances", `{}`},
+		{"kore.ping", `{}`},
+	}
+	for i, c := range cases {
 		id := "biz-" + string(rune('a'+i))
 		req := &pluginapi.Request{
-			Type: pluginapi.TypeRequest, ID: id, ReqID: "r-" + id, Method: method,
-			Params: json.RawMessage(`{"instance":"primary"}`),
+			Type: pluginapi.TypeRequest, ID: id, ReqID: "r-" + id, Method: c.method,
+			Params: json.RawMessage(c.params),
 		}
 		if err := pluginapi.WriteJSON(kernelConn, req); err != nil {
 			t.Fatalf("写请求失败: %v", err)
@@ -139,7 +145,7 @@ func TestServeBusinessMethods(t *testing.T) {
 		env := readFrame(t, kernelConn)
 		resp, ok := env.(*pluginapi.Response)
 		if !ok || resp.ID != id || resp.Error != nil {
-			t.Fatalf("%s 响应异常: %+v", method, env)
+			t.Fatalf("%s 响应异常: %+v", c.method, env)
 		}
 	}
 	// 收尾 shutdown 同样配对读响应帧。

@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/pengtang1024/kore-plugin-db-mysql/internal/mysqlop"
 	"github.com/pengtang1024/kore/pkg/pluginapi"
 )
 
@@ -32,8 +33,8 @@ type config struct {
 	version      string
 	requiresKore string
 	capabilities []string
-	instanceRoot string
 	startedAt    time.Time
+	mysql        mysqlop.Config
 }
 
 // loadConfig 读取协议环境变量并解析内嵌 info.json。
@@ -52,17 +53,19 @@ func loadConfig() (config, error) {
 		version:      m.Version,
 		requiresKore: m.RequiresKore,
 		capabilities: m.Capabilities,
-		instanceRoot: os.Getenv("KORE_MYSQL_ROOT"),
 		startedAt:    time.Now(),
 	}
 	if cfg.id == "" {
 		cfg.id = m.ID
 	}
-	if cfg.instanceRoot == "" {
-		cfg.instanceRoot = "/var/lib/kore/db-mysql"
-	}
 	if cfg.socket == "" {
 		return config{}, fmt.Errorf("缺少环境变量 KORE_PLUGIN_SOCK")
 	}
+	// 实例配置非法不阻断插件启动：错误挂在 Config.Err 上，只让 MySQL 方法返回 E_INVALID。
+	loaded, err := mysqlop.LoadConfig()
+	if err != nil {
+		loaded.Err = err
+	}
+	cfg.mysql = loaded
 	return cfg, nil
 }

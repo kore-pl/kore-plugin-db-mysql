@@ -4,69 +4,267 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengtang1024/kore/pkg/pluginapi"
 )
 
-// TestBusinessVerb 方法名归一化：mysql.<verb> 与裸 <verb> 都接受。
+// fakeExecutor 记录调用参数并返回固定结果；用于断言校验发生在执行面之前。
+type fakeExecutor struct {
+	statuses      []InstanceStatus
+	databases     []string
+	queryResult   QueryResult
+	statusResult  StatusResult
+	err           error
+	instancesCall int
+	databasesCall int
+	queryCall     int
+	statusCall    int
+	lastSQL       string
+	lastLimit     int
+	lastInclude   bool
+	lastInstances []InstanceConfig
+}
+
+func (f *fakeExecutor) Instances(instances []InstanceConfig) ([]InstanceStatus, error) {
+	f.instancesCall++
+	f.lastInstances = instances
+	return f.statuses, f.err
+}
+
+func (f *fakeExecutor) Databases(instance InstanceConfig, includeSystem bool) ([]string, error) {
+	f.databasesCall++
+	f.lastInclude = includeSystem
+	return f.databases, f.err
+}
+
+func (f *fakeExecutor) Query(instance InstanceConfig, sql string, limit int) (QueryResult, error) {
+	f.queryCall++
+	f.lastSQL = sql
+	f.lastLimit = limit
+	return f.queryResult, f.err
+}
+
+func (f *fakeExecutor) Status(instance InstanceConfig) (StatusResult, error) {
+	f.statusCall++
+	return f.statusResult, f.err
+}
+
+// callTestConfig 是带一个实例的测试配置。
+func callTestConfig() Config {
+	return Config{
+		Bin:     "mysql",
+		Timeout: 5 * time.Second,
+		Instances: []InstanceConfig{
+			{Name: "primary", Host: "127.0.0.1", Port: 3306, User: "root"},
+		},
+	}
+}
+
+// TestBusinessVerb 方法名归一化：4 个方法都接受 mysql.<verb> 与裸 <verb>。
 func TestBusinessVerb(t *testing.T) {
-	cases := map[string]string{
-		"mysql.instances": "instances", "mysql.slowQueries": "slowQueries",
-		"instances": "instances", "slowQueries": "slowQueries",
-	}
-	for method, want := range cases {
-		got, ok := businessVerb(method)
-		if !ok || got != want {
-			t.Fatalf("businessVerb(%q)=(%q,%v)，期望 (%q,true)", method, got, ok, want)
+	for _, verb := range []string{"instances", "databases", "query", "status"} {
+		for _, method := range []string{"mysql." + verb, verb} {
+			got, ok := businessVerb(method)
+			if !ok || got != verb {
+				t.Fatalf("businessVerb(%q)=(%q,%v)，期望 (%q,true)", method, got, ok, verb)
+			}
 		}
 	}
-	if _, ok := businessVerb("mysql.exec"); ok {
-		t.Fatal("mysql.exec 不应被接受")
+	for _, method := range []string{"mysql.exec", "mysql.slowQueries", "instances.foo"} {
+		if _, ok := businessVerb(method); ok {
+			t.Fatalf("businessVerb(%q) 不应被接受", method)
+		}
 	}
 }
 
-// TestCallResults 两方法正常路径返回结构化结果（骨架口径，不真连数据库）。
-func TestCallResults(t *testing.T) {
-	list, perr := Call("mysql.instances", json.RawMessage(`{"instance":"primary"}`), root, nil)
-	if perr != nil || !strings.Contains(string(list), `"count":0`) {
-		t.Fatalf("mysql.instances 结果=%s err=%v", list, perr)
+// TestCallInstancesEmptyConfig 无实例配置时返回空列表，不执行任何命令。
+func TestCallInstancesEmptyConfig(t *testing.T) {
+	result, perr := Call("mysql.instances", json.RawMessage(`{}`), Config{}, nil)
+	if perr != nil {
+		t.Fatalf("mysql.instances 错误: %v", perr)
 	}
-	slow, perr := Call("mysql.slowQueries", json.RawMessage(`{"instance":"primary"}`), root, nil)
-	if perr != nil || !strings.Contains(string(slow), `"threshold_ms":1000`) {
-		t.Fatalf("mysql.slowQueries 结果=%s err=%v", slow, perr)
+	var decoded InstancesResult
+	if err := json.Unmarshal(result, &decoded); err != nil {
+		t.Fatalf("结果解析失败: %v (%s)", err, result)
 	}
-	if !strings.Contains(string(slow), `"window":"1h"`) || !strings.Contains(string(slow), `"limit":20`) {
-		t.Fatalf("mysql.slowQueries 缺省值未生效: %s", slow)
+	if decoded.Count != 0 || len(decoded.Instances) != 0 {
+		t.Fatalf("结果=%s，期望空列表", result)
 	}
 }
 
-// TestCallParamValidation 非法参数形状、实例名非法、阈值越界均返回 E_INVALID。
-func TestCallParamValidation(t *testing.T) {
-	bad := []struct {
-		method string
-		params string
-	}{
-		{"mysql.instances", `[]`},
-		{"mysql.slowQueries", `not-json`},
-		{"mysql.instances", `{"instance":"../etc"}`},
-		{"mysql.slowQueries", `{"instance":"primary","threshold_ms":99999999}`},
-		{"mysql.slowQueries", `{"instance":"primary","limit":5000}`},
-		{"mysql.slowQueries", `{"instance":"primary","window":"garbage"}`},
+// TestCallInstancesResult 实例状态透传为结构化结果。
+func TestCallInstancesResult(t *testing.T) {
+	exec := &fakeExecutor{statuses: []InstanceStatus{
+		{Name: "primary", Host: "127.0.0.1", Port: 3306, Reachable: true, Version: "8.4.0"},
+	}}
+	result, perr := Call("mysql.instances", json.RawMessage(`{"instance":"primary"}`), callTestConfig(), exec)
+	if perr != nil {
+		t.Fatalf("mysql.instances 错误: %v", perr)
 	}
-	for _, c := range bad {
-		_, perr := Call(c.method, json.RawMessage(c.params), root, nil)
+	if exec.instancesCall != 1 || len(exec.lastInstances) != 1 || exec.lastInstances[0].Name != "primary" {
+		t.Fatalf("执行面入参错: calls=%d instances=%+v", exec.instancesCall, exec.lastInstances)
+	}
+	var decoded InstancesResult
+	if err := json.Unmarshal(result, &decoded); err != nil {
+		t.Fatalf("结果解析失败: %v", err)
+	}
+	if decoded.Count != 1 || !decoded.Instances[0].Reachable || decoded.Instances[0].Version != "8.4.0" {
+		t.Fatalf("结果=%s", result)
+	}
+	if strings.Contains(string(result), "pass") || strings.Contains(string(result), "secret") {
+		t.Fatalf("结果疑似泄漏密码: %s", result)
+	}
+}
+
+// TestCallInstancesUnknown 过滤不存在的实例返回 E_NOTFOUND。
+func TestCallInstancesUnknown(t *testing.T) {
+	_, perr := Call("mysql.instances", json.RawMessage(`{"instance":"nope"}`), callTestConfig(), &fakeExecutor{})
+	if perr == nil || perr.Code != pluginapi.E_NOTFOUND {
+		t.Fatalf("错误=%v，期望 E_NOTFOUND", perr)
+	}
+}
+
+// TestCallDatabases mysql.databases 透传 include_system 并返回库列表。
+func TestCallDatabases(t *testing.T) {
+	exec := &fakeExecutor{databases: []string{"app", "logs"}}
+	result, perr := Call("mysql.databases", json.RawMessage(`{"instance":"primary","include_system":true}`), callTestConfig(), exec)
+	if perr != nil {
+		t.Fatalf("mysql.databases 错误: %v", perr)
+	}
+	if !exec.lastInclude {
+		t.Fatal("include_system 未透传")
+	}
+	var decoded DatabasesResult
+	if err := json.Unmarshal(result, &decoded); err != nil {
+		t.Fatalf("结果解析失败: %v", err)
+	}
+	if decoded.Instance != "primary" || decoded.Count != 2 || decoded.Databases[0] != "app" {
+		t.Fatalf("结果=%s", result)
+	}
+}
+
+// TestCallQueryDefaults mysql.query 缺省 limit=100，SQL 原样交给执行面。
+func TestCallQueryDefaults(t *testing.T) {
+	exec := &fakeExecutor{queryResult: QueryResult{
+		Columns: []string{"n"},
+		Rows:    []json.RawMessage{json.RawMessage(`{"n":1}`)},
+	}}
+	result, perr := Call("mysql.query", json.RawMessage(`{"instance":"primary","sql":"SELECT 1 AS n"}`), callTestConfig(), exec)
+	if perr != nil {
+		t.Fatalf("mysql.query 错误: %v", perr)
+	}
+	if exec.lastLimit != defaultQueryLimit || exec.lastSQL != "SELECT 1 AS n" {
+		t.Fatalf("执行面入参错: limit=%d sql=%q", exec.lastLimit, exec.lastSQL)
+	}
+	var decoded QueryResult
+	if err := json.Unmarshal(result, &decoded); err != nil {
+		t.Fatalf("结果解析失败: %v", err)
+	}
+	if decoded.RowCount != 1 || string(decoded.Rows[0]) != `{"n":1}` || decoded.Truncated {
+		t.Fatalf("结果=%s", result)
+	}
+}
+
+// TestCallQueryLimitBounds limit 越界拒绝且不触达执行面。
+func TestCallQueryLimitBounds(t *testing.T) {
+	for _, limit := range []int{-1, maxQueryLimit + 1} {
+		exec := &fakeExecutor{}
+		_, perr := Call("mysql.query", json.RawMessage(`{"instance":"primary","sql":"SELECT 1","limit":`+itoa(limit)+`}`), callTestConfig(), exec)
 		if perr == nil || perr.Code != pluginapi.E_INVALID {
-			t.Fatalf("Call(%s,%s) 错误=%v，期望 E_INVALID", c.method, c.params, perr)
+			t.Fatalf("limit=%d 错误=%v，期望 E_INVALID", limit, perr)
 		}
+		if exec.queryCall != 0 {
+			t.Fatalf("limit=%d 越界仍触达执行面", limit)
+		}
+	}
+}
+
+// TestCallQueryWriteRejected 写操作/多语句在触达数据库前返回 E_INVALID。
+func TestCallQueryWriteRejected(t *testing.T) {
+	rejected := []string{
+		"INSERT INTO t VALUES (1)",
+		"UPDATE t SET a = 1",
+		"DELETE FROM t",
+		"DROP DATABASE mysql",
+		"TRUNCATE t",
+		"SELECT 1; DROP TABLE t",
+	}
+	for _, sql := range rejected {
+		exec := &fakeExecutor{}
+		params, _ := json.Marshal(map[string]any{"instance": "primary", "sql": sql})
+		_, perr := Call("mysql.query", params, callTestConfig(), exec)
+		if perr == nil || perr.Code != pluginapi.E_INVALID {
+			t.Fatalf("sql=%q 错误=%v，期望 E_INVALID", sql, perr)
+		}
+		if exec.queryCall != 0 {
+			t.Fatalf("sql=%q 被拒后仍触达执行面", sql)
+		}
+	}
+}
+
+// TestCallQueryValidation 缺参、实例不存在、实例名非法。
+func TestCallQueryValidation(t *testing.T) {
+	cases := []struct {
+		params string
+		code   string
+	}{
+		{`{"instance":"primary"}`, pluginapi.E_INVALID},
+		{`{"instance":"primary","sql":"   "}`, pluginapi.E_INVALID},
+		{`{"sql":"SELECT 1"}`, pluginapi.E_INVALID},
+		{`{"instance":"../etc","sql":"SELECT 1"}`, pluginapi.E_INVALID},
+		{`{"instance":"nope","sql":"SELECT 1"}`, pluginapi.E_NOTFOUND},
+		{`{"instance":"primary","sql":"SELECT 1","limit":"x"}`, pluginapi.E_INVALID},
+	}
+	for _, c := range cases {
+		_, perr := Call("mysql.query", json.RawMessage(c.params), callTestConfig(), &fakeExecutor{})
+		if perr == nil || perr.Code != c.code {
+			t.Fatalf("params=%s 错误=%v，期望 %s", c.params, perr, c.code)
+		}
+	}
+}
+
+// TestCallStatus mysql.status 透传结构化指标。
+func TestCallStatus(t *testing.T) {
+	exec := &fakeExecutor{statusResult: StatusResult{
+		Instance: "primary", Version: "8.4.0", MaxConnections: 151,
+		ThreadsConnected: 2, UptimeS: 100, Queries: 42, SlowQueries: 0,
+	}}
+	result, perr := Call("mysql.status", json.RawMessage(`{"instance":"primary"}`), callTestConfig(), exec)
+	if perr != nil {
+		t.Fatalf("mysql.status 错误: %v", perr)
+	}
+	if exec.statusCall != 1 {
+		t.Fatalf("status 调用次数=%d", exec.statusCall)
+	}
+	var decoded StatusResult
+	if err := json.Unmarshal(result, &decoded); err != nil {
+		t.Fatalf("结果解析失败: %v", err)
+	}
+	if decoded.Version != "8.4.0" || decoded.MaxConnections != 151 || decoded.Queries != 42 {
+		t.Fatalf("结果=%s", result)
 	}
 }
 
 // TestCallUnknownMethod 未知方法返回 E_NOTFOUND。
 func TestCallUnknownMethod(t *testing.T) {
-	_, perr := Call("mysql.exec", json.RawMessage(`{}`), root, nil)
+	_, perr := Call("mysql.exec", json.RawMessage(`{}`), callTestConfig(), &fakeExecutor{})
 	if perr == nil || perr.Code != pluginapi.E_NOTFOUND {
 		t.Fatalf("未知方法错误=%v，期望 E_NOTFOUND", perr)
 	}
 }
 
-const root = "/var/lib/kore/db-mysql"
+// TestCallOpErrorPassthrough 执行面 OpError 的错误码原样透传。
+func TestCallOpErrorPassthrough(t *testing.T) {
+	exec := &fakeExecutor{err: opErrorf(pluginapi.E_UPSTREAM, "连接被拒绝")}
+	_, perr := Call("mysql.status", json.RawMessage(`{"instance":"primary"}`), callTestConfig(), exec)
+	if perr == nil || perr.Code != pluginapi.E_UPSTREAM || perr.Message != "连接被拒绝" {
+		t.Fatalf("错误=%v，期望 E_UPSTREAM 透传", perr)
+	}
+}
+
+// itoa 避免在测试里为一个小转换引入 strconv。
+func itoa(v int) string {
+	data, _ := json.Marshal(v)
+	return string(data)
+}

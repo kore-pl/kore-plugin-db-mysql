@@ -1,5 +1,5 @@
 // Package fault 对 db-mysql 插件做四类故障注入，验证方法级错误返回。
-// 每个用例向 mysqlop.Call 的执行面注入一种故障，断言两方法返回的结构化错误码。
+// 每个用例向 mysqlop.Call 的执行面注入一种故障，断言方法返回的结构化错误码。
 package fault
 
 import (
@@ -10,38 +10,74 @@ import (
 	"github.com/pengtang1024/kore/pkg/pluginapi"
 )
 
-const testRoot = "/var/lib/kore/db-mysql"
+// testConfig 是带一个实例的插件配置。
+var testConfig = mysqlop.Config{
+	Bin:     "mysql",
+	Timeout: 0,
+	Instances: []mysqlop.InstanceConfig{
+		{Name: "primary", Host: "127.0.0.1", Port: 3306, User: "root"},
+	},
+}
 
 // faultExecutor 按注入类别让每个方法都失败，模拟四类运行时故障。
 type faultExecutor struct {
 	kind mysqlop.FaultKind
 }
 
-func (f faultExecutor) ListInstances(root string) ([]mysqlop.Instance, error) {
+func (f faultExecutor) Instances(instances []mysqlop.InstanceConfig) ([]mysqlop.InstanceStatus, error) {
 	return nil, mysqlop.NewFaultError(f.kind, "instances 执行面故障")
 }
 
-func (f faultExecutor) SlowQueries(root string, filter mysqlop.Filter) ([]mysqlop.SlowQuery, error) {
-	return nil, mysqlop.NewFaultError(f.kind, "slowQueries 执行面故障")
+func (f faultExecutor) Databases(instance mysqlop.InstanceConfig, includeSystem bool) ([]string, error) {
+	return nil, mysqlop.NewFaultError(f.kind, "databases 执行面故障")
 }
 
-// methods 是两类故障注入覆盖的方法及其合法参数。
+func (f faultExecutor) Query(instance mysqlop.InstanceConfig, sql string, limit int) (mysqlop.QueryResult, error) {
+	return mysqlop.QueryResult{}, mysqlop.NewFaultError(f.kind, "query 执行面故障")
+}
+
+func (f faultExecutor) Status(instance mysqlop.InstanceConfig) (mysqlop.StatusResult, error) {
+	return mysqlop.StatusResult{}, mysqlop.NewFaultError(f.kind, "status 执行面故障")
+}
+
+// okExecutor 是无故障执行面，用于 sanity 反证。
+type okExecutor struct{}
+
+func (okExecutor) Instances(instances []mysqlop.InstanceConfig) ([]mysqlop.InstanceStatus, error) {
+	return []mysqlop.InstanceStatus{}, nil
+}
+
+func (okExecutor) Databases(instance mysqlop.InstanceConfig, includeSystem bool) ([]string, error) {
+	return []string{}, nil
+}
+
+func (okExecutor) Query(instance mysqlop.InstanceConfig, sql string, limit int) (mysqlop.QueryResult, error) {
+	return mysqlop.QueryResult{Columns: []string{}, Rows: []json.RawMessage{}}, nil
+}
+
+func (okExecutor) Status(instance mysqlop.InstanceConfig) (mysqlop.StatusResult, error) {
+	return mysqlop.StatusResult{Instance: instance.Name, Version: "8.0.0"}, nil
+}
+
+// methods 是四类方法及其合法参数。
 var methods = []struct {
 	name   string
 	method string
 	params string
 }{
-	{"instances", "mysql.instances", `{"instance":"primary"}`},
-	{"slowQueries", "mysql.slowQueries", `{"instance":"primary","threshold_ms":500,"limit":10}`},
+	{"instances", "mysql.instances", `{}`},
+	{"databases", "mysql.databases", `{"instance":"primary"}`},
+	{"query", "mysql.query", `{"instance":"primary","sql":"SELECT 1"}`},
+	{"status", "mysql.status", `{"instance":"primary"}`},
 }
 
-// assertFault 对每个方法注入故障，断言返回 nil 结果 + 预期的协议错误码与类别关键词。
+// assertFault 对每个方法注入故障，断言返回 nil 结果 + 预期错误码与类别关键词。
 func assertFault(t *testing.T, kind mysqlop.FaultKind, wantCode, wantHint string) {
 	t.Helper()
 	exec := faultExecutor{kind: kind}
 	for _, m := range methods {
 		t.Run(m.name, func(t *testing.T) {
-			result, perr := mysqlop.Call(m.method, json.RawMessage(m.params), testRoot, exec)
+			result, perr := mysqlop.Call(m.method, json.RawMessage(m.params), testConfig, exec)
 			if perr == nil {
 				t.Fatalf("%s 注入 %s 后未返回错误（结果=%s）", m.method, kind, result)
 			}
@@ -58,7 +94,7 @@ func assertFault(t *testing.T, kind mysqlop.FaultKind, wantCode, wantHint string
 	}
 }
 
-// contains 是 strings.Contains 的本地封装，避免每个 fault 文件重复 import strings。
+// contains 是 strings.Contains 的本地封装。
 func contains(s, sub string) bool {
 	if len(sub) > len(s) {
 		return false
@@ -71,11 +107,11 @@ func contains(s, sub string) bool {
 	return false
 }
 
-// sanityNoFault 验证无故障时两方法正常返回，证明故障断言不是"永远失败"的假通过。
+// sanityNoFault 验证无故障时四方法正常返回，证明故障断言不是"永远失败"的假通过。
 func sanityNoFault(t *testing.T) {
 	t.Helper()
 	for _, m := range methods {
-		result, perr := mysqlop.Call(m.method, json.RawMessage(m.params), testRoot, nil)
+		result, perr := mysqlop.Call(m.method, json.RawMessage(m.params), testConfig, okExecutor{})
 		if perr != nil {
 			t.Fatalf("无故障时 %s 意外返回错误: %v", m.method, perr)
 		}
@@ -85,7 +121,7 @@ func sanityNoFault(t *testing.T) {
 	}
 }
 
-// verifyErrorContract 断言错误体是标准协议结构（含 code 字段）。
+// verifyErrorContract 断言错误体是标准协议结构。
 func verifyErrorContract(t *testing.T, perr *pluginapi.Error) {
 	t.Helper()
 	if perr == nil {

@@ -1,58 +1,87 @@
 package mysqlop
 
 import (
+	"errors"
 	"regexp"
 	"strings"
-	"time"
-
-	"github.com/pengtang1024/kore/pkg/pluginapi"
 )
 
-// maxLimit 是 mysql.slowQueries 单次返回的最大条数。
-const maxLimit = 1000
-
-// maxThresholdMS 是慢查询阈值上限（24 小时，毫秒）。
-const maxThresholdMS = 24 * 60 * 60 * 1000
-
-// instanceNameRE 是实例名的合法形状：小写字母/数字开头，仅含小写字母、数字、连字符与点。
+// 实例名：小写字母/数字开头，仅含小写字母、数字、点与连字符，≤64 字符。
 var instanceNameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,63}$`)
 
-// ValidateInstance 校验实例名：空串由调用方按语义决定是否允许（列出全部）。
-// 非空时拒绝非法字符、超长、路径穿越样式与 ".." 段；只做字符串校验，不访问系统。
-func ValidateInstance(name string) *pluginapi.Error {
+// 主机：允许主机名 / IPv4 / IPv6 字面量与端口无关的字符集；不允许空白、控制字符，
+// 也不允许以 "-" 开头（避免被 mysql 客户端当成命令行选项）。
+var hostRE = regexp.MustCompile(`^[A-Za-z0-9._:%-]+$`)
+
+// 用户名：常见 MySQL 用户名形态；同样禁止 "-" 开头，避免 argv 选项注入。
+var userRE = regexp.MustCompile(`^[A-Za-z0-9._@%:-]+$`)
+
+// 密码来源环境变量名。
+var passwordEnvRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
+
+// systemDatabases 是 mysql.databases 默认过滤的系统库。
+var systemDatabases = map[string]struct{}{
+	"information_schema": {},
+	"mysql":              {},
+	"performance_schema": {},
+	"sys":                {},
+}
+
+// ValidateInstance 校验实例名，返回协议错误（E_INVALID）。
+func ValidateInstance(name string) error {
+	return validateInstanceName(name)
+}
+
+// validateInstanceName 校验实例名，配置解析与请求参数共用。
+func validateInstanceName(name string) error {
 	if name == "" {
-		return nil
+		return errors.New("实例名不得为空")
 	}
 	if strings.ContainsRune(name, 0) {
-		return invalid("实例名含 NUL 字节")
+		return errors.New("实例名含 NUL 字节")
 	}
 	if strings.ContainsAny(name, "/\\") {
-		return invalid("实例名不得含路径分隔符")
+		return errors.New("实例名不得含路径分隔符")
 	}
 	if !instanceNameRE.MatchString(name) {
-		return invalid("实例名非法：须以小写字母/数字开头，仅含小写字母、数字、. 与 -")
+		return errors.New("实例名非法：须以小写字母/数字开头，仅含小写字母、数字、. 与 -，且不超过 64 字符")
 	}
 	if strings.Contains(name, "..") {
-		return invalid("实例名含 .. 段，禁止穿越")
+		return errors.New("实例名含 .. 段，禁止穿越")
 	}
 	return nil
 }
 
-// ValidateFilter 校验慢查询过滤参数的边界。
-func ValidateFilter(f Filter) *pluginapi.Error {
-	if perr := ValidateInstance(f.Instance); perr != nil {
-		return perr
+// validateHost 校验实例主机，拒绝 argv 选项注入与不可打印字符。
+func validateHost(host string) error {
+	if host == "" {
+		return errors.New("host 不得为空")
 	}
-	if f.ThresholdMS < 0 || f.ThresholdMS > maxThresholdMS {
-		return invalid("threshold_ms 超出 [0, 86400000] 范围")
+	if len(host) > 253 {
+		return errors.New("host 超过 253 字符")
 	}
-	if f.Limit < 0 || f.Limit > maxLimit {
-		return invalid("limit 超出 [0, 1000] 范围")
+	if strings.HasPrefix(host, "-") {
+		return errors.New("host 不得以 - 开头（防止被当作客户端选项）")
 	}
-	if f.Window != "" {
-		if _, err := time.ParseDuration(f.Window); err != nil {
-			return invalid("window 不是合法时长（如 5m / 1h）")
-		}
+	if !hostRE.MatchString(host) {
+		return errors.New("host 含非法字符：仅允许字母、数字、. - _ : %")
+	}
+	return nil
+}
+
+// validateUser 校验用户名，拒绝 argv 选项注入。
+func validateUser(user string) error {
+	if user == "" {
+		return errors.New("user 不得为空")
+	}
+	if len(user) > 128 {
+		return errors.New("user 超过 128 字符")
+	}
+	if strings.HasPrefix(user, "-") {
+		return errors.New("user 不得以 - 开头（防止被当作客户端选项）")
+	}
+	if !userRE.MatchString(user) {
+		return errors.New("user 含非法字符：仅允许字母、数字、. - _ @ % :")
 	}
 	return nil
 }

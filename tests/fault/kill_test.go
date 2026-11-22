@@ -7,13 +7,13 @@ import (
 	"github.com/pengtang1024/kore-plugin-db-mysql/internal/mysqlop"
 )
 
-// TestKillFault 注入 kill -9（进程被信号终止），期望两方法返回 E_UPSTREAM。
+// TestKillFault 注入 kill -9（进程被信号终止），期望四方法返回 E_UPSTREAM。
 func TestKillFault(t *testing.T) {
 	assertFault(t, mysqlop.FaultKill, "E_UPSTREAM", "信号 9")
 }
 
 // TestKillFaultContract 单独验证 kill 故障的错误体结构完整（真实调用，非空壳）。
 func TestKillFaultContract(t *testing.T) {
-	_, perr := mysqlop.Call("mysql.instances", json.RawMessage(`{"instance":"primary"}`), testRoot, faultExecutor{kind: mysqlop.FaultKill})
+	_, perr := mysqlop.Call("mysql.instances", json.RawMessage(`{"instance":"primary"}`), testConfig, faultExecutor{kind: mysqlop.FaultKill})
 	verifyErrorContract(t, perr)
 }
