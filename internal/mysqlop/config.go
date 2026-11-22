@@ -23,10 +23,19 @@ const (
 	EnvBin = "KORE_MYSQL_BIN"
 	// EnvTimeout 覆盖命令超时（Go 时长，如 15s）。
 	EnvTimeout = "KORE_MYSQL_TIMEOUT"
+	// EnvDumpBin 覆盖 mysqldump 客户端路径（缺省 PATH 中的 mysqldump）。
+	EnvDumpBin = "KORE_MYSQLDUMP_BIN"
+	// EnvExportDir 覆盖 import/export 的文件白名单根目录（必须是绝对路径）。
+	EnvExportDir = "KORE_DB_EXPORT_DIR"
 	// EnvRoot 是插件数据根目录，供缺省 instances.json 使用。
 	EnvRoot = "KORE_MYSQL_ROOT"
 
-	defaultBin     = "mysql"
+	defaultBin = "mysql"
+	// defaultDumpBin 是导出工具缺省值；与 mysql 客户端一样由宿主机提供。
+	defaultDumpBin = "mysqldump"
+	// DefaultExportDirName 是未配置 KORE_DB_EXPORT_DIR 时相对插件状态目录的子目录名。
+	DefaultExportDirName = "exports"
+
 	defaultTimeout = 15 * time.Second
 	maxTimeout     = 2 * time.Minute
 	maxInstances   = 64
@@ -61,6 +70,27 @@ func LoadClient() (string, time.Duration, error) {
 		timeout = parsed
 	}
 	return bin, timeout, nil
+}
+
+// LoadDumpBin 读取 mysqldump 客户端路径（KORE_MYSQLDUMP_BIN，缺省 PATH 中的 mysqldump）。
+func LoadDumpBin() string {
+	if bin := strings.TrimSpace(os.Getenv(EnvDumpBin)); bin != "" {
+		return bin
+	}
+	return defaultDumpBin
+}
+
+// ResolveExportDir 解析 import/export 白名单根：
+// KORE_DB_EXPORT_DIR 优先；否则 <KORE_STATE_DIR>/exports；两者都没有时返回空串，
+// 由方法层给出可操作的 E_INVALID（而不是写相对路径）。
+func ResolveExportDir(stateDir string) string {
+	if dir := strings.TrimSpace(os.Getenv(EnvExportDir)); dir != "" {
+		return dir
+	}
+	if dir := strings.TrimSpace(stateDir); dir != "" {
+		return filepath.Join(dir, DefaultExportDirName)
+	}
+	return ""
 }
 
 // LoadEnvInstances 读取 KORE_MYSQL_INSTANCES / KORE_MYSQL_CONFIG / <root>/instances.json

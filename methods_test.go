@@ -86,3 +86,16 @@ func TestPingResult(t *testing.T) {
 		t.Fatalf("ping 结果=%s", resp.Result)
 	}
 }
+
+// TestDispatchAdminRequiresCapability 写方法经 dispatch 同样受 system:admin 门控：
+// 插件 manifest 未声明能力时，建库请求在触达执行面之前就返回 E_UNAUTHORIZED。
+func TestDispatchAdminRequiresCapability(t *testing.T) {
+	cfg := testConfig()
+	response := dispatchOnce(t, &cfg, "db-mysql.createDatabase", `{"name":"app"}`)
+	if response.Error == nil || response.Error.Code != pluginapi.E_UNAUTHORIZED {
+		t.Fatalf("错误=%v，期望 E_UNAUTHORIZED", response.Error)
+	}
+	if response.Result != nil {
+		t.Fatalf("越权时不应带结果: %s", response.Result)
+	}
+}

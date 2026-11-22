@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0 (2026-11-23)
+
+- feat: L2 日常管理能力——`db-mysql.createDatabase`（`CREATE DATABASE IF NOT EXISTS`，默认 `utf8mb4`/`utf8mb4_unicode_ci`）、`db-mysql.dropDatabase`、`db-mysql.createUser`、`db-mysql.dropUser`、`db-mysql.grant`（7 个有真实副作用的方法/方法对）
+- feat: `db-mysql.export` 调用 `mysqldump` 导出到白名单目录，`db-mysql.import` 用 stdin 把 SQL 文件交给 `mysql` 客户端；单文件上限 256 MiB，失败不留半成品
+- security: 写操作要求插件声明并被授予 `system:admin`；`dropDatabase`/`dropUser` 必须 `confirm=true`，否则 `E_INVALID` 且对象保持不动
+- security: 系统库（`mysql`/`information_schema`/`performance_schema`/`sys`）与 `root` 账号受保护，任何 confirm 下都返回 `E_UNAUTHORIZED`
+- security: 库名/用户名/表名/字符集/排序规则统一白名单正则（`[a-zA-Z0-9_]`）+ 反引号包裹；授权权限白名单拒绝 `ALL PRIVILEGES`/`ALL`/`GRANT OPTION`
+- security: 密码只出现在经 stdin 传入的 SQL 里，不进 argv/ps；字面量按服务端 `sql_mode` 转义（`NO_BACKSLASH_ESCAPES` 兼容）；响应永不含密码，执行面错误再按请求密码脱敏
+- security: import/export 路径白名单走 `ResolveExisting`/`ResolveTarget`（词法 + 符号链接二次归属），拒绝 `..`、根外绝对路径与软链逃逸
+- feat: 新增 `KORE_MYSQLDUMP_BIN`（mysqldump 路径）与 `KORE_DB_EXPORT_DIR`（导入导出白名单根，缺省 `<state>/exports`）
+- test: 单测覆盖标识符注入、系统库/root 保护、confirm 缺失、权限白名单、路径穿越/软链逃逸、密码不回显与错误脱敏；`tests/fault/` 四类故障扩展到全部 11 个方法
+- test: 真实 MySQL E2E 全流程（建库→建用户→授权→导出→导入→不带 confirm 被拒→系统库保护→删除→清理）
+- docs: README 补 L2 方法表、安全边界、导入导出规则与真实 MySQL E2E 命令
+
 ## 0.2.0 (2026-11-23)
 
 - feat: 新增配置契约 `db-mysql.config.get` / `db-mysql.config.set`（`<KORE_STATE_DIR>/config.json`，0600 原子写）——默认实例 `host/port/user/password/password_env/databases_include_system`，优先级 config.json > 环境变量 > 默认值，保存后同一进程下一次调用即生效

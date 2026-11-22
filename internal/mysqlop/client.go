@@ -20,6 +20,7 @@ import (
 // Client 通过本机 mysql 客户端执行数据库操作（os/exec，不引入 driver）。
 type Client struct {
 	bin     string
+	dumpBin string
 	timeout time.Duration
 }
 
@@ -29,11 +30,15 @@ func NewClient(cfg Config) *Client {
 	if bin == "" {
 		bin = defaultBin
 	}
+	dumpBin := strings.TrimSpace(cfg.DumpBin)
+	if dumpBin == "" {
+		dumpBin = defaultDumpBin
+	}
 	timeout := cfg.Timeout
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
-	return &Client{bin: bin, timeout: timeout}
+	return &Client{bin: bin, dumpBin: dumpBin, timeout: timeout}
 }
 
 // Instances 并行为每个实例做连通性探测（SELECT 1, VERSION()），单实例失败只写入

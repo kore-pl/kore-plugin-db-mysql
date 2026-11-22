@@ -24,6 +24,21 @@ type fakeExecutor struct {
 	lastLimit     int
 	lastInclude   bool
 	lastInstances []InstanceConfig
+
+	// L2 写操作：记录最后一次调用参数，便于断言「校验失败不触达执行面」与参数形状。
+	adminCalls     int
+	created        bool
+	dropped        bool
+	exportedSize   int64
+	lastDatabase   string
+	lastUser       string
+	lastHost       string
+	lastPassword   string
+	lastCharset    string
+	lastCollation  string
+	lastPrivileges []string
+	lastTables     []string
+	lastFilePath   string
 }
 
 func (f *fakeExecutor) Instances(instances []InstanceConfig) ([]InstanceStatus, error) {
@@ -50,6 +65,48 @@ func (f *fakeExecutor) Status(instance InstanceConfig) (StatusResult, error) {
 	return f.statusResult, f.err
 }
 
+func (f *fakeExecutor) CreateDatabase(instance InstanceConfig, name, charset, collation string) (bool, error) {
+	f.adminCalls++
+	f.lastDatabase, f.lastCharset, f.lastCollation = name, charset, collation
+	return f.created, f.err
+}
+
+func (f *fakeExecutor) DropDatabase(instance InstanceConfig, name string) (bool, error) {
+	f.adminCalls++
+	f.lastDatabase = name
+	return f.dropped, f.err
+}
+
+func (f *fakeExecutor) CreateUser(instance InstanceConfig, user, host, password string) (bool, error) {
+	f.adminCalls++
+	f.lastUser, f.lastHost, f.lastPassword = user, host, password
+	return f.created, f.err
+}
+
+func (f *fakeExecutor) DropUser(instance InstanceConfig, user, host string) (bool, error) {
+	f.adminCalls++
+	f.lastUser, f.lastHost = user, host
+	return f.dropped, f.err
+}
+
+func (f *fakeExecutor) Grant(instance InstanceConfig, user, host, database string, privileges []string) error {
+	f.adminCalls++
+	f.lastUser, f.lastHost, f.lastDatabase, f.lastPrivileges = user, host, database, privileges
+	return f.err
+}
+
+func (f *fakeExecutor) Export(instance InstanceConfig, database string, tables []string, filePath string) (int64, error) {
+	f.adminCalls++
+	f.lastDatabase, f.lastTables, f.lastFilePath = database, tables, filePath
+	return f.exportedSize, f.err
+}
+
+func (f *fakeExecutor) Import(instance InstanceConfig, database, filePath string) error {
+	f.adminCalls++
+	f.lastDatabase, f.lastFilePath = database, filePath
+	return f.err
+}
+
 // callTestConfig 是带一个实例的测试配置。
 func callTestConfig() Config {
 	return Config{
@@ -63,7 +120,10 @@ func callTestConfig() Config {
 
 // TestBusinessVerb 方法名归一化：只接受 db-mysql.<verb>，域不符或裸动词一律拒绝。
 func TestBusinessVerb(t *testing.T) {
-	for _, verb := range []string{"instances", "databases", "query", "status"} {
+	for _, verb := range []string{
+		"instances", "databases", "query", "status",
+		"createDatabase", "dropDatabase", "createUser", "dropUser", "grant", "export", "import",
+	} {
 		method := "db-mysql." + verb
 		got, ok := businessVerb(method)
 		if !ok || got != verb {

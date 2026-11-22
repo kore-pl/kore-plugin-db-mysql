@@ -63,20 +63,37 @@ type InstanceStatus struct {
 // Config 是插件运行期 MySQL 配置。
 type Config struct {
 	Instances []InstanceConfig
-	Bin       string
-	Timeout   time.Duration
+	// Bin / DumpBin 是 mysql 与 mysqldump 客户端路径（缺省走 PATH）。
+	Bin     string
+	DumpBin string
+	Timeout time.Duration
 	// IncludeSystem 是 db-mysql.databases 未显式传 include_system 时的默认值。
 	IncludeSystem bool
+	// Admin 表示插件的 info.json 已声明 system:admin：L2 写操作的前置门控。
+	Admin bool
+	// ExportDir 是 import/export 的文件白名单根（KORE_DB_EXPORT_DIR，缺省 <state>/exports）。
+	ExportDir string
 	// Err 是配置解析错误；非 nil 时所有业务方法返回 E_INVALID，但插件仍可启动。
 	Err error
 }
 
-// Executor 是数据库操作执行面：真实实现是本机 mysql 客户端，测试可注入故障。
+// Executor 是数据库操作执行面：真实实现是本机 mysql/mysqldump 客户端，测试可注入故障。
+//
+// L2 写操作的方法层负责「校验 + 安全边界」（confirm / 系统库 / root / 白名单 / 路径），
+// 执行面只负责把已通过校验的参数变成真实 SQL / 子进程调用。
 type Executor interface {
 	Instances(instances []InstanceConfig) ([]InstanceStatus, error)
 	Databases(instance InstanceConfig, includeSystem bool) ([]string, error)
 	Query(instance InstanceConfig, sql string, limit int) (QueryResult, error)
 	Status(instance InstanceConfig) (StatusResult, error)
+
+	CreateDatabase(instance InstanceConfig, name, charset, collation string) (bool, error)
+	DropDatabase(instance InstanceConfig, name string) (bool, error)
+	CreateUser(instance InstanceConfig, user, host, password string) (bool, error)
+	DropUser(instance InstanceConfig, user, host string) (bool, error)
+	Grant(instance InstanceConfig, user, host, database string, privileges []string) error
+	Export(instance InstanceConfig, database string, tables []string, filePath string) (int64, error)
+	Import(instance InstanceConfig, database, filePath string) error
 }
 
 // InstancesResult 是 db-mysql.instances 的结构化结果。
@@ -136,4 +153,106 @@ type queryParams struct {
 // statusParams 是 db-mysql.status 的显式入参形状。
 type statusParams struct {
 	Instance string `json:"instance"`
+}
+
+// createDatabaseParams 是 db-mysql.createDatabase 的入参形状。
+type createDatabaseParams struct {
+	Instance  string `json:"instance"`
+	Name      string `json:"name"`
+	Charset   string `json:"charset"`
+	Collation string `json:"collation"`
+}
+
+// dropDatabaseParams 是 db-mysql.dropDatabase 的入参形状；Confirm 必须为 true。
+type dropDatabaseParams struct {
+	Instance string `json:"instance"`
+	Name     string `json:"name"`
+	Confirm  bool   `json:"confirm"`
+}
+
+// createUserParams 是 db-mysql.createUser 的入参形状。
+// Grants 是可选便捷授权，每项形如 "<database>:SELECT,INSERT"。
+type createUserParams struct {
+	Instance string   `json:"instance"`
+	User     string   `json:"user"`
+	Host     string   `json:"host"`
+	Password string   `json:"password"`
+	Grants   []string `json:"grants"`
+}
+
+// dropUserParams 是 db-mysql.dropUser 的入参形状；Confirm 必须为 true。
+type dropUserParams struct {
+	Instance string `json:"instance"`
+	User     string `json:"user"`
+	Host     string `json:"host"`
+	Confirm  bool   `json:"confirm"`
+}
+
+// grantParams 是 db-mysql.grant 的入参形状。
+type grantParams struct {
+	Instance   string   `json:"instance"`
+	User       string   `json:"user"`
+	Host       string   `json:"host"`
+	Database   string   `json:"database"`
+	Privileges []string `json:"privileges"`
+}
+
+// exportParams 是 db-mysql.export 的入参形状。
+type exportParams struct {
+	Instance string   `json:"instance"`
+	Database string   `json:"database"`
+	Tables   []string `json:"tables"`
+	FilePath string   `json:"file_path"`
+}
+
+// importParams 是 db-mysql.import 的入参形状。
+type importParams struct {
+	Instance string `json:"instance"`
+	Database string `json:"database"`
+	FilePath string `json:"file_path"`
+}
+
+// CreateDatabaseResult 是 db-mysql.createDatabase 的结果。
+type CreateDatabaseResult struct {
+	Created bool   `json:"created"`
+	Name    string `json:"name"`
+}
+
+// DropDatabaseResult 是 db-mysql.dropDatabase 的结果。
+type DropDatabaseResult struct {
+	Dropped bool   `json:"dropped"`
+	Name    string `json:"name"`
+}
+
+// CreateUserResult 是 db-mysql.createUser 的结果；**不含密码**。
+type CreateUserResult struct {
+	Created bool   `json:"created"`
+	User    string `json:"user"`
+	Host    string `json:"host"`
+}
+
+// DropUserResult 是 db-mysql.dropUser 的结果。
+type DropUserResult struct {
+	Dropped bool `json:"dropped"`
+}
+
+// GrantResult 是 db-mysql.grant 的结果。
+type GrantResult struct {
+	Granted    bool     `json:"granted"`
+	Privileges []string `json:"privileges"`
+}
+
+// ExportResult 是 db-mysql.export 的结果。
+type ExportResult struct {
+	Database  string   `json:"database"`
+	FilePath  string   `json:"file_path"`
+	SizeBytes int64    `json:"size_bytes"`
+	Tables    []string `json:"tables"`
+}
+
+// ImportResult 是 db-mysql.import 的结果。
+type ImportResult struct {
+	Database  string `json:"database"`
+	FilePath  string `json:"file_path"`
+	SizeBytes int64  `json:"size_bytes"`
 }

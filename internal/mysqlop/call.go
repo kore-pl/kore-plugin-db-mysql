@@ -32,6 +32,20 @@ func Call(method string, params json.RawMessage, cfg Config, exec Executor) (jso
 		return callQuery(params, cfg, exec)
 	case "status":
 		return callStatus(params, cfg, exec)
+	case "createDatabase":
+		return callCreateDatabase(params, cfg, exec)
+	case "dropDatabase":
+		return callDropDatabase(params, cfg, exec)
+	case "createUser":
+		return callCreateUser(params, cfg, exec)
+	case "dropUser":
+		return callDropUser(params, cfg, exec)
+	case "grant":
+		return callGrant(params, cfg, exec)
+	case "export":
+		return callExport(params, cfg, exec)
+	case "import":
+		return callImport(params, cfg, exec)
 	}
 	return nil, errNotFound(method)
 }
@@ -46,7 +60,9 @@ func businessVerb(method string) (string, bool) {
 		return "", false
 	}
 	switch verb {
-	case "instances", "databases", "query", "status":
+	case "instances", "databases", "query", "status",
+		"createDatabase", "dropDatabase", "createUser", "dropUser", "grant",
+		"export", "import":
 		return verb, true
 	}
 	return "", false

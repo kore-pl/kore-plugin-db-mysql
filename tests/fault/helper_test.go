@@ -4,19 +4,43 @@ package fault
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/pengtang1024/kore-plugin-db-mysql/internal/mysqlop"
 	"github.com/pengtang1024/kore/pkg/pluginapi"
 )
 
-// testConfig 是带一个实例的插件配置。
+// faultExportDir 是故障用例的导出白名单根，由 TestMain 创建临时目录并清理：
+// L2 的 export/import 先过路径校验，未配置导出目录会在触达执行面之前返回 E_INVALID。
+var faultExportDir string
+
+// testConfig 是带一个实例、已声明 system:admin 的插件配置（导出目录在 TestMain 里补齐）。
 var testConfig = mysqlop.Config{
 	Bin:     "mysql",
 	Timeout: 0,
+	Admin:   true,
 	Instances: []mysqlop.InstanceConfig{
 		{Name: "primary", Host: "127.0.0.1", Port: 3306, User: "root"},
 	},
+}
+
+// TestMain 准备临时导出目录与一个可导入的种子文件（import 要求文件已存在），结束后清理。
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "kore-db-mysql-fault-")
+	if err != nil {
+		os.Exit(1)
+	}
+	faultExportDir = dir
+	testConfig.ExportDir = dir
+	if err := os.WriteFile(filepath.Join(dir, "fault-seed.sql"), []byte("SELECT 1;\n"), 0o600); err != nil {
+		_ = os.RemoveAll(dir)
+		os.Exit(1)
+	}
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
 }
 
 // faultExecutor 按注入类别让每个方法都失败，模拟四类运行时故障。
@@ -24,20 +48,52 @@ type faultExecutor struct {
 	kind mysqlop.FaultKind
 }
 
+func (f faultExecutor) fail(what string) error {
+	return mysqlop.NewFaultError(f.kind, what+" 执行面故障")
+}
+
 func (f faultExecutor) Instances(instances []mysqlop.InstanceConfig) ([]mysqlop.InstanceStatus, error) {
-	return nil, mysqlop.NewFaultError(f.kind, "instances 执行面故障")
+	return nil, f.fail("instances")
 }
 
 func (f faultExecutor) Databases(instance mysqlop.InstanceConfig, includeSystem bool) ([]string, error) {
-	return nil, mysqlop.NewFaultError(f.kind, "databases 执行面故障")
+	return nil, f.fail("databases")
 }
 
 func (f faultExecutor) Query(instance mysqlop.InstanceConfig, sql string, limit int) (mysqlop.QueryResult, error) {
-	return mysqlop.QueryResult{}, mysqlop.NewFaultError(f.kind, "query 执行面故障")
+	return mysqlop.QueryResult{}, f.fail("query")
 }
 
 func (f faultExecutor) Status(instance mysqlop.InstanceConfig) (mysqlop.StatusResult, error) {
-	return mysqlop.StatusResult{}, mysqlop.NewFaultError(f.kind, "status 执行面故障")
+	return mysqlop.StatusResult{}, f.fail("status")
+}
+
+func (f faultExecutor) CreateDatabase(instance mysqlop.InstanceConfig, name, charset, collation string) (bool, error) {
+	return false, f.fail("createDatabase")
+}
+
+func (f faultExecutor) DropDatabase(instance mysqlop.InstanceConfig, name string) (bool, error) {
+	return false, f.fail("dropDatabase")
+}
+
+func (f faultExecutor) CreateUser(instance mysqlop.InstanceConfig, user, host, password string) (bool, error) {
+	return false, f.fail("createUser")
+}
+
+func (f faultExecutor) DropUser(instance mysqlop.InstanceConfig, user, host string) (bool, error) {
+	return false, f.fail("dropUser")
+}
+
+func (f faultExecutor) Grant(instance mysqlop.InstanceConfig, user, host, database string, privileges []string) error {
+	return f.fail("grant")
+}
+
+func (f faultExecutor) Export(instance mysqlop.InstanceConfig, database string, tables []string, filePath string) (int64, error) {
+	return 0, f.fail("export")
+}
+
+func (f faultExecutor) Import(instance mysqlop.InstanceConfig, database, filePath string) error {
+	return f.fail("import")
 }
 
 // okExecutor 是无故障执行面，用于 sanity 反证。
@@ -59,7 +115,35 @@ func (okExecutor) Status(instance mysqlop.InstanceConfig) (mysqlop.StatusResult,
 	return mysqlop.StatusResult{Instance: instance.Name, Version: "8.0.0"}, nil
 }
 
-// methods 是四类方法及其合法参数。
+func (okExecutor) CreateDatabase(instance mysqlop.InstanceConfig, name, charset, collation string) (bool, error) {
+	return true, nil
+}
+
+func (okExecutor) DropDatabase(instance mysqlop.InstanceConfig, name string) (bool, error) {
+	return true, nil
+}
+
+func (okExecutor) CreateUser(instance mysqlop.InstanceConfig, user, host, password string) (bool, error) {
+	return true, nil
+}
+
+func (okExecutor) DropUser(instance mysqlop.InstanceConfig, user, host string) (bool, error) {
+	return true, nil
+}
+
+func (okExecutor) Grant(instance mysqlop.InstanceConfig, user, host, database string, privileges []string) error {
+	return nil
+}
+
+func (okExecutor) Export(instance mysqlop.InstanceConfig, database string, tables []string, filePath string) (int64, error) {
+	return 1, nil
+}
+
+func (okExecutor) Import(instance mysqlop.InstanceConfig, database, filePath string) error {
+	return nil
+}
+
+// methods 是全部方法及其合法参数（含 L2 写操作）。
 var methods = []struct {
 	name   string
 	method string
@@ -69,6 +153,13 @@ var methods = []struct {
 	{"databases", "db-mysql.databases", `{"instance":"primary"}`},
 	{"query", "db-mysql.query", `{"instance":"primary","sql":"SELECT 1"}`},
 	{"status", "db-mysql.status", `{"instance":"primary"}`},
+	{"createDatabase", "db-mysql.createDatabase", `{"instance":"primary","name":"kore_fault"}`},
+	{"dropDatabase", "db-mysql.dropDatabase", `{"instance":"primary","name":"kore_fault","confirm":true}`},
+	{"createUser", "db-mysql.createUser", `{"instance":"primary","user":"kore_fault_user"}`},
+	{"dropUser", "db-mysql.dropUser", `{"instance":"primary","user":"kore_fault_user","confirm":true}`},
+	{"grant", "db-mysql.grant", `{"instance":"primary","user":"kore_fault_user","database":"kore_fault","privileges":["SELECT"]}`},
+	{"export", "db-mysql.export", `{"instance":"primary","database":"kore_fault","file_path":"fault.sql"}`},
+	{"import", "db-mysql.import", `{"instance":"primary","database":"kore_fault","file_path":"fault-seed.sql"}`},
 }
 
 // assertFault 对每个方法注入故障，断言返回 nil 结果 + 预期错误码与类别关键词。

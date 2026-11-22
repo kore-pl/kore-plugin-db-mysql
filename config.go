@@ -113,6 +113,7 @@ func loadConfig() (config, error) {
 	if err != nil {
 		return config{}, err
 	}
+	dumpBin := mysqlop.LoadDumpBin()
 	envInstances, envErr := mysqlop.LoadEnvInstances()
 
 	includeDefault := store.Exists() || primaryEnvSet()
@@ -120,8 +121,11 @@ func loadConfig() (config, error) {
 	mysqlCfg := mysqlop.Config{
 		Instances:     instances,
 		Bin:           bin,
+		DumpBin:       dumpBin,
 		Timeout:       timeout,
 		IncludeSystem: values.DatabasesIncludeSystem,
+		Admin:         declaresCapability(m.Capabilities, "system:admin"),
+		ExportDir:     mysqlop.ResolveExportDir(stateDir),
 	}
 	if envErr != nil {
 		mysqlCfg.Err = envErr
@@ -166,6 +170,17 @@ func defaultValues() fileValues {
 func primaryEnvSet() bool {
 	for _, key := range []string{EnvHost, EnvPort, EnvUser, EnvPasswordEnv, EnvIncludeSystem} {
 		if strings.TrimSpace(os.Getenv(key)) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// declaresCapability 判断内嵌 manifest 是否声明了某个特权能力。
+// L2 写操作以此门控：未声明 system:admin 的构建不允许执行建库/删库/用户/授权/导入导出。
+func declaresCapability(capabilities []string, want string) bool {
+	for _, capability := range capabilities {
+		if capability == want {
 			return true
 		}
 	}
