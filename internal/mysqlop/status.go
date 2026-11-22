@@ -6,7 +6,7 @@ import (
 	"github.com/pengtang1024/kore/pkg/pluginapi"
 )
 
-// callStatus 处理 mysql.status：SHOW STATUS 关键指标 + SHOW VARIABLES 版本/连接上限。
+// callStatus 处理 db-mysql.status：SHOW STATUS 关键指标 + SHOW VARIABLES 版本/连接上限。
 func callStatus(raw json.RawMessage, cfg Config, exec Executor) (json.RawMessage, *pluginapi.Error) {
 	var p statusParams
 	if perr := decodeParams(raw, &p); perr != nil {

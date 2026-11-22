@@ -61,17 +61,24 @@ func callTestConfig() Config {
 	}
 }
 
-// TestBusinessVerb 方法名归一化：4 个方法都接受 mysql.<verb> 与裸 <verb>。
+// TestBusinessVerb 方法名归一化：只接受 db-mysql.<verb>，域不符或裸动词一律拒绝。
 func TestBusinessVerb(t *testing.T) {
 	for _, verb := range []string{"instances", "databases", "query", "status"} {
-		for _, method := range []string{"mysql." + verb, verb} {
-			got, ok := businessVerb(method)
-			if !ok || got != verb {
-				t.Fatalf("businessVerb(%q)=(%q,%v)，期望 (%q,true)", method, got, ok, verb)
-			}
+		method := "db-mysql." + verb
+		got, ok := businessVerb(method)
+		if !ok || got != verb {
+			t.Fatalf("businessVerb(%q)=(%q,%v)，期望 (%q,true)", method, got, ok, verb)
 		}
 	}
-	for _, method := range []string{"mysql.exec", "mysql.slowQueries", "instances.foo"} {
+	rejected := []string{
+		"db-mysql.exec",          // 未知动词
+		"db-mysql.slowQueries",   // 未知动词
+		"db-mysql.instances.foo", // 多一段
+		"mysql.instances",        // 旧域（协议不一致）
+		"instances",              // 裸动词（v0.1.0 起不再兼容）
+		"db-mysql.",              // 空动词
+	}
+	for _, method := range rejected {
 		if _, ok := businessVerb(method); ok {
 			t.Fatalf("businessVerb(%q) 不应被接受", method)
 		}
@@ -80,9 +87,9 @@ func TestBusinessVerb(t *testing.T) {
 
 // TestCallInstancesEmptyConfig 无实例配置时返回空列表，不执行任何命令。
 func TestCallInstancesEmptyConfig(t *testing.T) {
-	result, perr := Call("mysql.instances", json.RawMessage(`{}`), Config{}, nil)
+	result, perr := Call("db-mysql.instances", json.RawMessage(`{}`), Config{}, nil)
 	if perr != nil {
-		t.Fatalf("mysql.instances 错误: %v", perr)
+		t.Fatalf("db-mysql.instances 错误: %v", perr)
 	}
 	var decoded InstancesResult
 	if err := json.Unmarshal(result, &decoded); err != nil {
@@ -98,9 +105,9 @@ func TestCallInstancesResult(t *testing.T) {
 	exec := &fakeExecutor{statuses: []InstanceStatus{
 		{Name: "primary", Host: "127.0.0.1", Port: 3306, Reachable: true, Version: "8.4.0"},
 	}}
-	result, perr := Call("mysql.instances", json.RawMessage(`{"instance":"primary"}`), callTestConfig(), exec)
+	result, perr := Call("db-mysql.instances", json.RawMessage(`{"instance":"primary"}`), callTestConfig(), exec)
 	if perr != nil {
-		t.Fatalf("mysql.instances 错误: %v", perr)
+		t.Fatalf("db-mysql.instances 错误: %v", perr)
 	}
 	if exec.instancesCall != 1 || len(exec.lastInstances) != 1 || exec.lastInstances[0].Name != "primary" {
 		t.Fatalf("执行面入参错: calls=%d instances=%+v", exec.instancesCall, exec.lastInstances)
@@ -119,18 +126,18 @@ func TestCallInstancesResult(t *testing.T) {
 
 // TestCallInstancesUnknown 过滤不存在的实例返回 E_NOTFOUND。
 func TestCallInstancesUnknown(t *testing.T) {
-	_, perr := Call("mysql.instances", json.RawMessage(`{"instance":"nope"}`), callTestConfig(), &fakeExecutor{})
+	_, perr := Call("db-mysql.instances", json.RawMessage(`{"instance":"nope"}`), callTestConfig(), &fakeExecutor{})
 	if perr == nil || perr.Code != pluginapi.E_NOTFOUND {
 		t.Fatalf("错误=%v，期望 E_NOTFOUND", perr)
 	}
 }
 
-// TestCallDatabases mysql.databases 透传 include_system 并返回库列表。
+// TestCallDatabases db-mysql.databases 透传 include_system 并返回库列表。
 func TestCallDatabases(t *testing.T) {
 	exec := &fakeExecutor{databases: []string{"app", "logs"}}
-	result, perr := Call("mysql.databases", json.RawMessage(`{"instance":"primary","include_system":true}`), callTestConfig(), exec)
+	result, perr := Call("db-mysql.databases", json.RawMessage(`{"instance":"primary","include_system":true}`), callTestConfig(), exec)
 	if perr != nil {
-		t.Fatalf("mysql.databases 错误: %v", perr)
+		t.Fatalf("db-mysql.databases 错误: %v", perr)
 	}
 	if !exec.lastInclude {
 		t.Fatal("include_system 未透传")
@@ -144,15 +151,15 @@ func TestCallDatabases(t *testing.T) {
 	}
 }
 
-// TestCallQueryDefaults mysql.query 缺省 limit=100，SQL 原样交给执行面。
+// TestCallQueryDefaults db-mysql.query 缺省 limit=100，SQL 原样交给执行面。
 func TestCallQueryDefaults(t *testing.T) {
 	exec := &fakeExecutor{queryResult: QueryResult{
 		Columns: []string{"n"},
 		Rows:    []json.RawMessage{json.RawMessage(`{"n":1}`)},
 	}}
-	result, perr := Call("mysql.query", json.RawMessage(`{"instance":"primary","sql":"SELECT 1 AS n"}`), callTestConfig(), exec)
+	result, perr := Call("db-mysql.query", json.RawMessage(`{"instance":"primary","sql":"SELECT 1 AS n"}`), callTestConfig(), exec)
 	if perr != nil {
-		t.Fatalf("mysql.query 错误: %v", perr)
+		t.Fatalf("db-mysql.query 错误: %v", perr)
 	}
 	if exec.lastLimit != defaultQueryLimit || exec.lastSQL != "SELECT 1 AS n" {
 		t.Fatalf("执行面入参错: limit=%d sql=%q", exec.lastLimit, exec.lastSQL)
@@ -170,7 +177,7 @@ func TestCallQueryDefaults(t *testing.T) {
 func TestCallQueryLimitBounds(t *testing.T) {
 	for _, limit := range []int{-1, maxQueryLimit + 1} {
 		exec := &fakeExecutor{}
-		_, perr := Call("mysql.query", json.RawMessage(`{"instance":"primary","sql":"SELECT 1","limit":`+itoa(limit)+`}`), callTestConfig(), exec)
+		_, perr := Call("db-mysql.query", json.RawMessage(`{"instance":"primary","sql":"SELECT 1","limit":`+itoa(limit)+`}`), callTestConfig(), exec)
 		if perr == nil || perr.Code != pluginapi.E_INVALID {
 			t.Fatalf("limit=%d 错误=%v，期望 E_INVALID", limit, perr)
 		}
@@ -193,7 +200,7 @@ func TestCallQueryWriteRejected(t *testing.T) {
 	for _, sql := range rejected {
 		exec := &fakeExecutor{}
 		params, _ := json.Marshal(map[string]any{"instance": "primary", "sql": sql})
-		_, perr := Call("mysql.query", params, callTestConfig(), exec)
+		_, perr := Call("db-mysql.query", params, callTestConfig(), exec)
 		if perr == nil || perr.Code != pluginapi.E_INVALID {
 			t.Fatalf("sql=%q 错误=%v，期望 E_INVALID", sql, perr)
 		}
@@ -217,22 +224,22 @@ func TestCallQueryValidation(t *testing.T) {
 		{`{"instance":"primary","sql":"SELECT 1","limit":"x"}`, pluginapi.E_INVALID},
 	}
 	for _, c := range cases {
-		_, perr := Call("mysql.query", json.RawMessage(c.params), callTestConfig(), &fakeExecutor{})
+		_, perr := Call("db-mysql.query", json.RawMessage(c.params), callTestConfig(), &fakeExecutor{})
 		if perr == nil || perr.Code != c.code {
 			t.Fatalf("params=%s 错误=%v，期望 %s", c.params, perr, c.code)
 		}
 	}
 }
 
-// TestCallStatus mysql.status 透传结构化指标。
+// TestCallStatus db-mysql.status 透传结构化指标。
 func TestCallStatus(t *testing.T) {
 	exec := &fakeExecutor{statusResult: StatusResult{
 		Instance: "primary", Version: "8.4.0", MaxConnections: 151,
 		ThreadsConnected: 2, UptimeS: 100, Queries: 42, SlowQueries: 0,
 	}}
-	result, perr := Call("mysql.status", json.RawMessage(`{"instance":"primary"}`), callTestConfig(), exec)
+	result, perr := Call("db-mysql.status", json.RawMessage(`{"instance":"primary"}`), callTestConfig(), exec)
 	if perr != nil {
-		t.Fatalf("mysql.status 错误: %v", perr)
+		t.Fatalf("db-mysql.status 错误: %v", perr)
 	}
 	if exec.statusCall != 1 {
 		t.Fatalf("status 调用次数=%d", exec.statusCall)
@@ -248,7 +255,7 @@ func TestCallStatus(t *testing.T) {
 
 // TestCallUnknownMethod 未知方法返回 E_NOTFOUND。
 func TestCallUnknownMethod(t *testing.T) {
-	_, perr := Call("mysql.exec", json.RawMessage(`{}`), callTestConfig(), &fakeExecutor{})
+	_, perr := Call("db-mysql.exec", json.RawMessage(`{}`), callTestConfig(), &fakeExecutor{})
 	if perr == nil || perr.Code != pluginapi.E_NOTFOUND {
 		t.Fatalf("未知方法错误=%v，期望 E_NOTFOUND", perr)
 	}
@@ -257,7 +264,7 @@ func TestCallUnknownMethod(t *testing.T) {
 // TestCallOpErrorPassthrough 执行面 OpError 的错误码原样透传。
 func TestCallOpErrorPassthrough(t *testing.T) {
 	exec := &fakeExecutor{err: opErrorf(pluginapi.E_UPSTREAM, "连接被拒绝")}
-	_, perr := Call("mysql.status", json.RawMessage(`{"instance":"primary"}`), callTestConfig(), exec)
+	_, perr := Call("db-mysql.status", json.RawMessage(`{"instance":"primary"}`), callTestConfig(), exec)
 	if perr == nil || perr.Code != pluginapi.E_UPSTREAM || perr.Message != "连接被拒绝" {
 		t.Fatalf("错误=%v，期望 E_UPSTREAM 透传", perr)
 	}

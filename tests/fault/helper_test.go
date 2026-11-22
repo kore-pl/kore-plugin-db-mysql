@@ -65,10 +65,10 @@ var methods = []struct {
 	method string
 	params string
 }{
-	{"instances", "mysql.instances", `{}`},
-	{"databases", "mysql.databases", `{"instance":"primary"}`},
-	{"query", "mysql.query", `{"instance":"primary","sql":"SELECT 1"}`},
-	{"status", "mysql.status", `{"instance":"primary"}`},
+	{"instances", "db-mysql.instances", `{}`},
+	{"databases", "db-mysql.databases", `{"instance":"primary"}`},
+	{"query", "db-mysql.query", `{"instance":"primary","sql":"SELECT 1"}`},
+	{"status", "db-mysql.status", `{"instance":"primary"}`},
 }
 
 // assertFault 对每个方法注入故障，断言返回 nil 结果 + 预期错误码与类别关键词。

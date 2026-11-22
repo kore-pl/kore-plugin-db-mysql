@@ -47,7 +47,7 @@ type InstanceConfig struct {
 	PasswordEnv string `json:"password_env"`
 }
 
-// InstanceStatus 是 mysql.instances 的单实例结果。Error 为空串表示探测成功。
+// InstanceStatus 是 db-mysql.instances 的单实例结果。Error 为空串表示探测成功。
 type InstanceStatus struct {
 	Name      string `json:"name"`
 	Host      string `json:"host"`
@@ -74,20 +74,20 @@ type Executor interface {
 	Status(instance InstanceConfig) (StatusResult, error)
 }
 
-// InstancesResult 是 mysql.instances 的结构化结果。
+// InstancesResult 是 db-mysql.instances 的结构化结果。
 type InstancesResult struct {
 	Instances []InstanceStatus `json:"instances"`
 	Count     int              `json:"count"`
 }
 
-// DatabasesResult 是 mysql.databases 的结构化结果。
+// DatabasesResult 是 db-mysql.databases 的结构化结果。
 type DatabasesResult struct {
 	Instance  string   `json:"instance"`
 	Databases []string `json:"databases"`
 	Count     int      `json:"count"`
 }
 
-// QueryResult 是 mysql.query 的结构化结果。
+// QueryResult 是 db-mysql.query 的结构化结果。
 //
 // Rows 的每个元素是已编码的 JSON 对象（列名 → 值），值由客户端文本推断为
 // null / 数字 / 字符串；行内容动态，因此在解析收口处直接产出 json.RawMessage，
@@ -99,7 +99,7 @@ type QueryResult struct {
 	Truncated bool              `json:"truncated"`
 }
 
-// StatusResult 是 mysql.status 的结构化结果。
+// StatusResult 是 db-mysql.status 的结构化结果。
 type StatusResult struct {
 	Instance         string `json:"instance"`
 	Version          string `json:"version"`
@@ -110,25 +110,25 @@ type StatusResult struct {
 	SlowQueries      int64  `json:"slow_queries"`
 }
 
-// instancesParams 是 mysql.instances 的显式入参形状（instance 可选）。
+// instancesParams 是 db-mysql.instances 的显式入参形状（instance 可选）。
 type instancesParams struct {
 	Instance string `json:"instance"`
 }
 
-// databasesParams 是 mysql.databases 的显式入参形状。
+// databasesParams 是 db-mysql.databases 的显式入参形状。
 type databasesParams struct {
 	Instance      string `json:"instance"`
 	IncludeSystem bool   `json:"include_system"`
 }
 
-// queryParams 是 mysql.query 的显式入参形状。
+// queryParams 是 db-mysql.query 的显式入参形状。
 type queryParams struct {
 	Instance string `json:"instance"`
 	SQL      string `json:"sql"`
 	Limit    int    `json:"limit"`
 }
 
-// statusParams 是 mysql.status 的显式入参形状。
+// statusParams 是 db-mysql.status 的显式入参形状。
 type statusParams struct {
 	Instance string `json:"instance"`
 }

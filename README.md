@@ -40,19 +40,19 @@ MySQL/MariaDB 管理插件：真实探测实例、列库、执行只读查询、
 
 ## 方法
 
-四个方法的入参都接受 `mysql.<verb>` 与裸 `<verb>` 两种写法。
+方法名遵循 `kore.plugin.v1` 的 `<plugin-id>.<action>` 约定（PLUGIN-PROTOCOL §7.2）：域必须等于本插件 id `db-mysql`，**只接受完整限定名**，不接受裸动词或旧 `mysql.` 前缀（v0.1.0 无存量用户，不做兼容层）。HTTP 调用为 `POST /api/v1/invoke/db-mysql/db-mysql.instances`。
 
 | 方法 | 入参 | 结果 |
 | --- | --- | --- |
-| `mysql.instances` | `instance`（可选，限定单个实例） | `{instances:[{name,host,port,reachable,version,error}],count}` |
-| `mysql.databases` | `instance`（必填）、`include_system`（可选，默认 false） | `{instance,databases:[...],count}` |
-| `mysql.query` | `instance`（必填）、`sql`（必填）、`limit`（可选，默认 100，上限 1000） | `{columns,rows,row_count,truncated}` |
-| `mysql.status` | `instance`（必填） | `{instance,version,max_connections,threads_connected,uptime_s,queries,slow_queries}` |
+| `db-mysql.instances` | `instance`（可选，限定单个实例） | `{instances:[{name,host,port,reachable,version,error}],count}` |
+| `db-mysql.databases` | `instance`（必填）、`include_system`（可选，默认 false） | `{instance,databases:[...],count}` |
+| `db-mysql.query` | `instance`（必填）、`sql`（必填）、`limit`（可选，默认 100，上限 1000） | `{columns,rows,row_count,truncated}` |
+| `db-mysql.status` | `instance`（必填） | `{instance,version,max_connections,threads_connected,uptime_s,queries,slow_queries}` |
 
-- `mysql.instances`：对每个实例执行 `SELECT 1, VERSION()`；单实例失败只写入该实例的 `error` 字段（其余实例照常返回），返回值中**永远没有密码**
-- `mysql.databases`：`SHOW DATABASES`，默认过滤 `information_schema` / `mysql` / `performance_schema` / `sys`
-- `mysql.query`：只读白名单（见下节），结果按列名编码为对象；NULL → JSON `null`，规范数字 → JSON number，其余 → string；列名重复时追加 `_2`、`_3`
-- `mysql.status`：`SHOW STATUS` 的 `Threads_connected` / `Uptime` / `Queries` / `Slow_queries` + `SHOW VARIABLES` 的 `version` / `max_connections`
+- `db-mysql.instances`：对每个实例执行 `SELECT 1, VERSION()`；单实例失败只写入该实例的 `error` 字段（其余实例照常返回），返回值中**永远没有密码**
+- `db-mysql.databases`：`SHOW DATABASES`，默认过滤 `information_schema` / `mysql` / `performance_schema` / `sys`
+- `db-mysql.query`：只读白名单（见下节），结果按列名编码为对象；NULL → JSON `null`，规范数字 → JSON number，其余 → string；列名重复时追加 `_2`、`_3`
+- `db-mysql.status`：`SHOW STATUS` 的 `Threads_connected` / `Uptime` / `Queries` / `Slow_queries` + `SHOW VARIABLES` 的 `version` / `max_connections`
 
 ## 只读 SQL 白名单
 
@@ -77,7 +77,7 @@ MySQL/MariaDB 管理插件：真实探测实例、列库、执行只读查询、
 
 使用 `mysql --batch` 的制表符分隔输出，自己解析而不是依赖驱动：
 
-- `mysql.query` 使用默认字段转义（`\t`、`\n`、`\\`、`\0`），解析时还原。**刻意不使用 `--raw`**：`--raw` 会关闭字段转义，字段内的制表符/换行会破坏 TSV（MariaDB 11.8 与 MySQL 8.4 客户端实测一致）
+- `db-mysql.query` 使用默认字段转义（`\t`、`\n`、`\\`、`\0`），解析时还原。**刻意不使用 `--raw`**：`--raw` 会关闭字段转义，字段内的制表符/换行会破坏 TSV（MariaDB 11.8 与 MySQL 8.4 客户端实测一致）
 - 版本/状态等元数据值域受控，使用 `--batch --raw --skip-column-names`
 - 客户端把 SQL `NULL` 输出为文本 `NULL`（`--batch` 下 MariaDB 与 MySQL 客户端行为一致），因此 `NULL` / `\N` 都映射为 JSON `null`；已知边界：batch 文本无法区分 SQL NULL 与字符串字面量 `NULL`，需要该字面量时用 `CONCAT('NU','LL')` 之类写法规避
 

@@ -130,7 +130,7 @@ func TestServeBusinessMethods(t *testing.T) {
 		method string
 		params string
 	}{
-		{"mysql.instances", `{}`},
+		{"db-mysql.instances", `{}`},
 		{"kore.ping", `{}`},
 	}
 	for i, c := range cases {

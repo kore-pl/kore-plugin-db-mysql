@@ -19,7 +19,7 @@ var userRE = regexp.MustCompile(`^[A-Za-z0-9._@%:-]+$`)
 // 密码来源环境变量名。
 var passwordEnvRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
 
-// systemDatabases 是 mysql.databases 默认过滤的系统库。
+// systemDatabases 是 db-mysql.databases 默认过滤的系统库。
 var systemDatabases = map[string]struct{}{
 	"information_schema": {},
 	"mysql":              {},

@@ -36,11 +36,14 @@ func Call(method string, params json.RawMessage, cfg Config, exec Executor) (jso
 	return nil, errNotFound(method)
 }
 
-// businessVerb 把 mysql.<verb> 或裸 <verb> 归一为动词名。
+// methodPrefix 是方法名的插件域前缀：协议要求 `<plugin-id>.<action>`（PLUGIN-PROTOCOL §7.2）。
+const methodPrefix = "db-mysql."
+
+// businessVerb 把 db-mysql.<verb> 归一为动词名；域不是本插件 id 的一律拒绝（不再接受裸动词）。
 func businessVerb(method string) (string, bool) {
-	verb := method
-	if strings.HasPrefix(method, "mysql.") {
-		verb = strings.TrimPrefix(method, "mysql.")
+	verb, ok := strings.CutPrefix(method, methodPrefix)
+	if !ok {
+		return "", false
 	}
 	switch verb {
 	case "instances", "databases", "query", "status":

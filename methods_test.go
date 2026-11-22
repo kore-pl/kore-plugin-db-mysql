@@ -12,17 +12,17 @@ import (
 func TestDispatchMethods(t *testing.T) {
 	req := &pluginapi.Request{
 		Type: pluginapi.TypeRequest, ID: "id", ReqID: "r",
-		Method: "mysql.instances", Params: json.RawMessage(`{}`),
+		Method: "db-mysql.instances", Params: json.RawMessage(`{}`),
 	}
 	resp, shutdown := dispatch(req, testConfig(), testLogger())
 	if shutdown {
-		t.Fatal("mysql.instances 不应触发 shutdown")
+		t.Fatal("db-mysql.instances 不应触发 shutdown")
 	}
 	if resp.Error != nil {
-		t.Fatalf("mysql.instances 意外错误: %v", resp.Error)
+		t.Fatalf("db-mysql.instances 意外错误: %v", resp.Error)
 	}
 	if !strings.Contains(string(resp.Result), `"count":0`) {
-		t.Fatalf("mysql.instances 结果=%s", resp.Result)
+		t.Fatalf("db-mysql.instances 结果=%s", resp.Result)
 	}
 }
 
@@ -33,13 +33,13 @@ func TestDispatchReject(t *testing.T) {
 		params string
 		code   string
 	}{
-		{"mysql.instances", `{"instance":"../etc"}`, pluginapi.E_INVALID},
-		{"mysql.databases", `{}`, pluginapi.E_INVALID},
-		{"mysql.query", `{"instance":"primary","sql":"INSERT INTO t VALUES (1)"}`, pluginapi.E_INVALID},
-		{"mysql.query", `{"instance":"primary","sql":"SELECT 1","limit":5000}`, pluginapi.E_INVALID},
-		{"mysql.status", `{"instance":"missing"}`, pluginapi.E_NOTFOUND},
-		{"mysql.exec", `{}`, pluginapi.E_NOTFOUND},
-		{"mysql.slowQueries", `{"instance":"primary"}`, pluginapi.E_NOTFOUND},
+		{"db-mysql.instances", `{"instance":"../etc"}`, pluginapi.E_INVALID},
+		{"db-mysql.databases", `{}`, pluginapi.E_INVALID},
+		{"db-mysql.query", `{"instance":"primary","sql":"INSERT INTO t VALUES (1)"}`, pluginapi.E_INVALID},
+		{"db-mysql.query", `{"instance":"primary","sql":"SELECT 1","limit":5000}`, pluginapi.E_INVALID},
+		{"db-mysql.status", `{"instance":"missing"}`, pluginapi.E_NOTFOUND},
+		{"db-mysql.exec", `{}`, pluginapi.E_NOTFOUND},
+		{"db-mysql.slowQueries", `{"instance":"primary"}`, pluginapi.E_NOTFOUND},
 	}
 	for _, c := range cases {
 		req := &pluginapi.Request{
@@ -62,7 +62,7 @@ func TestDispatchConfigInvalid(t *testing.T) {
 	cfg.mysql.Err = &configError{msg: "实例配置非法"}
 	req := &pluginapi.Request{
 		Type: pluginapi.TypeRequest, ID: "id", ReqID: "r",
-		Method: "mysql.instances", Params: json.RawMessage(`{}`),
+		Method: "db-mysql.instances", Params: json.RawMessage(`{}`),
 	}
 	resp, _ := dispatch(req, cfg, testLogger())
 	if resp.Error == nil || resp.Error.Code != pluginapi.E_INVALID {

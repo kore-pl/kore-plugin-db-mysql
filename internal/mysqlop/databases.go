@@ -6,7 +6,7 @@ import (
 	"github.com/pengtang1024/kore/pkg/pluginapi"
 )
 
-// callDatabases 处理 mysql.databases：SHOW DATABASES，默认过滤系统库。
+// callDatabases 处理 db-mysql.databases：SHOW DATABASES，默认过滤系统库。
 func callDatabases(raw json.RawMessage, cfg Config, exec Executor) (json.RawMessage, *pluginapi.Error) {
 	var p databasesParams
 	if perr := decodeParams(raw, &p); perr != nil {

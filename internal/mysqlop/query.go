@@ -8,13 +8,13 @@ import (
 )
 
 const (
-	// defaultQueryLimit 是 mysql.query 缺省返回行数。
+	// defaultQueryLimit 是 db-mysql.query 缺省返回行数。
 	defaultQueryLimit = 100
-	// maxQueryLimit 是 mysql.query 允许的最大行数。
+	// maxQueryLimit 是 db-mysql.query 允许的最大行数。
 	maxQueryLimit = 1000
 )
 
-// callQuery 处理 mysql.query：只读白名单 → 行数上限 → 执行 → 结构化结果。
+// callQuery 处理 db-mysql.query：只读白名单 → 行数上限 → 执行 → 结构化结果。
 // 写操作在触达数据库之前就被 E_INVALID 拒绝。
 func callQuery(raw json.RawMessage, cfg Config, exec Executor) (json.RawMessage, *pluginapi.Error) {
 	var p queryParams

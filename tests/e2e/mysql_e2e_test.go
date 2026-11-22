@@ -40,9 +40,9 @@ func TestDockerMySQL(t *testing.T) {
 
 	seedDatabase(t, instance)
 
-	// 步骤 1：mysql.instances 显示 reachable + version。
-	raw := call(t, cfg, "mysql.instances", map[string]any{"instance": instance.Name})
-	logJSON(t, "STEP1 mysql.instances", raw)
+	// 步骤 1：db-mysql.instances 显示 reachable + version。
+	raw := call(t, cfg, "db-mysql.instances", map[string]any{"instance": instance.Name})
+	logJSON(t, "STEP1 db-mysql.instances", raw)
 	assertNoSecret(t, raw, secret)
 	var instances mysqlop.InstancesResult
 	mustUnmarshal(t, raw, &instances)
@@ -59,9 +59,9 @@ func TestDockerMySQL(t *testing.T) {
 		t.Fatalf("可达实例不应带 error: %+v", instances.Instances[0])
 	}
 
-	// 步骤 2：mysql.databases 列出库并过滤系统库。
-	raw = call(t, cfg, "mysql.databases", map[string]any{"instance": instance.Name})
-	logJSON(t, "STEP2 mysql.databases", raw)
+	// 步骤 2：db-mysql.databases 列出库并过滤系统库。
+	raw = call(t, cfg, "db-mysql.databases", map[string]any{"instance": instance.Name})
+	logJSON(t, "STEP2 db-mysql.databases", raw)
 	assertNoSecret(t, raw, secret)
 	var databases mysqlop.DatabasesResult
 	mustUnmarshal(t, raw, &databases)
@@ -74,9 +74,9 @@ func TestDockerMySQL(t *testing.T) {
 		}
 	}
 
-	// 步骤 3：mysql.query "SELECT 1 AS n" → [{n:1}]。
-	raw = call(t, cfg, "mysql.query", map[string]any{"instance": instance.Name, "sql": "SELECT 1 AS n"})
-	logJSON(t, "STEP3 mysql.query SELECT 1 AS n", raw)
+	// 步骤 3：db-mysql.query "SELECT 1 AS n" → [{n:1}]。
+	raw = call(t, cfg, "db-mysql.query", map[string]any{"instance": instance.Name, "sql": "SELECT 1 AS n"})
+	logJSON(t, "STEP3 db-mysql.query SELECT 1 AS n", raw)
 	assertNoSecret(t, raw, secret)
 	var query mysqlop.QueryResult
 	mustUnmarshal(t, raw, &query)
@@ -90,7 +90,7 @@ func TestDockerMySQL(t *testing.T) {
 	}
 
 	// 步骤 4：写操作被 E_INVALID 拒绝。
-	result, perr := mysqlop.Call("mysql.query", mustJSON(t, map[string]any{
+	result, perr := mysqlop.Call("db-mysql.query", mustJSON(t, map[string]any{
 		"instance": instance.Name, "sql": "DROP DATABASE mysql",
 	}), cfg, nil)
 	if perr == nil {
@@ -106,10 +106,10 @@ func TestDockerMySQL(t *testing.T) {
 	t.Logf("STEP4 写操作被拒: %s: %s", perr.Code, perr.Message)
 
 	// 附加：NULL 与字段内制表符、结果截断、status 指标、多语句拒绝。
-	raw = call(t, cfg, "mysql.query", map[string]any{
+	raw = call(t, cfg, "db-mysql.query", map[string]any{
 		"instance": instance.Name, "sql": "SELECT NULL AS n, 'a\tb' AS t",
 	})
-	logJSON(t, "STEP5 mysql.query NULL + tab", raw)
+	logJSON(t, "STEP5 db-mysql.query NULL + tab", raw)
 	assertNoSecret(t, raw, secret)
 	var nullQuery mysqlop.QueryResult
 	mustUnmarshal(t, raw, &nullQuery)
@@ -122,18 +122,18 @@ func TestDockerMySQL(t *testing.T) {
 		t.Fatalf("字段内制表符被破坏: %q", nullRow["t"])
 	}
 
-	raw = call(t, cfg, "mysql.query", map[string]any{
+	raw = call(t, cfg, "db-mysql.query", map[string]any{
 		"instance": instance.Name, "sql": "SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3", "limit": 2,
 	})
-	logJSON(t, "STEP6 mysql.query limit=2", raw)
+	logJSON(t, "STEP6 db-mysql.query limit=2", raw)
 	var truncated mysqlop.QueryResult
 	mustUnmarshal(t, raw, &truncated)
 	if truncated.RowCount != 2 || !truncated.Truncated {
 		t.Fatalf("截断结果=%+v，期望 2 行且 truncated=true", truncated)
 	}
 
-	raw = call(t, cfg, "mysql.status", map[string]any{"instance": instance.Name})
-	logJSON(t, "STEP7 mysql.status", raw)
+	raw = call(t, cfg, "db-mysql.status", map[string]any{"instance": instance.Name})
+	logJSON(t, "STEP7 db-mysql.status", raw)
 	assertNoSecret(t, raw, secret)
 	var status mysqlop.StatusResult
 	mustUnmarshal(t, raw, &status)
@@ -141,7 +141,7 @@ func TestDockerMySQL(t *testing.T) {
 		t.Fatalf("status 指标异常: %+v", status)
 	}
 
-	_, perr = mysqlop.Call("mysql.query", mustJSON(t, map[string]any{
+	_, perr = mysqlop.Call("db-mysql.query", mustJSON(t, map[string]any{
 		"instance": instance.Name, "sql": "SELECT 1; DROP DATABASE mysql",
 	}), cfg, nil)
 	if perr == nil || perr.Code != pluginapi.E_INVALID {

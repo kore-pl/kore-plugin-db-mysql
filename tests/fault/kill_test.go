@@ -14,6 +14,6 @@ func TestKillFault(t *testing.T) {
 
 // TestKillFaultContract 单独验证 kill 故障的错误体结构完整（真实调用，非空壳）。
 func TestKillFaultContract(t *testing.T) {
-	_, perr := mysqlop.Call("mysql.instances", json.RawMessage(`{"instance":"primary"}`), testConfig, faultExecutor{kind: mysqlop.FaultKill})
+	_, perr := mysqlop.Call("db-mysql.instances", json.RawMessage(`{"instance":"primary"}`), testConfig, faultExecutor{kind: mysqlop.FaultKill})
 	verifyErrorContract(t, perr)
 }
