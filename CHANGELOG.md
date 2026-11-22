@@ -1,12 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-11-23)
 
 - feat: 新增配置契约 `db-mysql.config.get` / `db-mysql.config.set`（`<KORE_STATE_DIR>/config.json`，0600 原子写）——默认实例 `host/port/user/password/password_env/databases_include_system`，优先级 config.json > 环境变量 > 默认值，保存后同一进程下一次调用即生效
 - feat: 默认实例密码可由界面填写并保存在本机 0600 配置文件；`config.get` 只回 `***`，`config.set` 收到 `***` 保留原值；`password_env` 旧路径继续兼容且被直接密码覆盖
 - feat: `db-mysql.databases` 未显式传 `include_system` 时使用配置项 `databases_include_system`
 - test: 配置优先级、默认实例合并（config 覆盖旧路径的 default）、密码掩码、热生效与非法值不落盘单测
 - docs: README 补配置契约与密码来源说明
+- feat: 真实 MySQL 连接与只读查询（拒绝写操作）
+- refactor: 方法名统一为 db-mysql.<action>，对齐协议域校验
+- build: 位级可复现打包（stage chmod + tar --mode 归一、size_bytes 收敛），二进制改嵌 manifest.json，消除同版本 sha 漂移
 
 ## 0.1.0 (2026-11-22)
 
