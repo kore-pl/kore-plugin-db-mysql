@@ -13,5 +13,5 @@
   "depends_on": [],
   "conflicts": ["db-postgres"],
   "scenario_tags": ["data"],
-  "size_bytes": 0
+  "size_bytes": 1483419
 }
