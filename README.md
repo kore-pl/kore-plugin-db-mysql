@@ -84,6 +84,7 @@ MySQL/MariaDB 管理插件：真实探测实例、列库、执行只读查询、
 | `db-mysql.createDatabase` | `name`（必填）、`charset`（默认 `utf8mb4`）、`collation`（默认 `utf8mb4_unicode_ci`） | `{created,name}` |
 | `db-mysql.dropDatabase` | `name`、`confirm`（**必须 true**） | `{dropped,name}` |
 | `db-mysql.createUser` | `user`、`host`（默认 `localhost`）、`password`（可选）、`grants`（可选） | `{created,user,host}` |
+| `db-mysql.changePassword` | `user`、`host`（默认 `localhost`）、`password`（≥8 字节）、`confirm`（root/系统账号**必须 true**） | `{user,host,changed}`；**不含密码** |
 | `db-mysql.dropUser` | `user`、`host`（默认 `localhost`）、`confirm`（**必须 true**） | `{dropped}` |
 | `db-mysql.grant` | `user`、`host`（默认 `localhost`）、`database`、`privileges[]` | `{granted,privileges}` |
 | `db-mysql.export` | `database`、`tables[]`（可选）、`file_path` | `{database,file_path,size_bytes,tables}` |
@@ -95,6 +96,7 @@ MySQL/MariaDB 管理插件：真实探测实例、列库、执行只读查询、
 - `dropDatabase`：系统库 `mysql` / `information_schema` / `performance_schema` / `sys` **在任何 confirm 下都返回 `E_UNAUTHORIZED`**；缺少 `confirm=true` 返回 `E_INVALID`（「删库不可恢复，请传 confirm=true」），库不会被删除；库不存在返回 `E_NOTFOUND`。
 - `createUser`：`CREATE USER 'u'@'h' IDENTIFIED BY '...'`；不传 `password` 时创建无密码账号（MySQL 默认语义，建议始终传密码）；用户名只允许 `[a-zA-Z0-9_]`（1-32），host 只允许字母/数字/`.`/`_`/`:`/`%`/`-`；已存在时 `created=false`，**不会改密码**；密码只进 SQL（经 stdin），响应与日志都不回显。
 - `createUser.grants` 是可选便捷授权，每项格式 `<database>:<权限>[,<权限>...]`，例如 `["app_db:SELECT,INSERT"]`；复用 `grant` 的白名单，创建成功后逐项执行。
+- `changePassword`：`ALTER USER 'u'@'h' IDENTIFIED BY ?` 的代码层参数绑定（模板不含密码，绑定值经 stdin 单点转义）；user/host 走同一白名单（引号/分号/反引号一律 `E_INVALID`）；root 等受保护账号缺 `confirm=true` 回 `E_INVALID` 并给 hint；弱密码（<8 字节 / 与账号同名）拒绝；MySQL 错误号映射人话（1045 `E_UNAUTHORIZED`、1396 `E_NOTFOUND`、1227/1142 `E_UNAUTHORIZED`、1819 `E_INVALID`）；密码不进 argv/日志/结果。
 - `dropUser`：`root` 账号（任意 host）返回 `E_UNAUTHORIZED`；缺少 `confirm=true` 返回 `E_INVALID`；用户不存在返回 `E_NOTFOUND`。
 - `grant`：`GRANT <privs> ON \`db\`.* TO 'u'@'h'`；权限白名单 `SELECT/INSERT/UPDATE/DELETE/CREATE/DROP/ALTER/INDEX/EXECUTE`，**明确拒绝 `ALL PRIVILEGES`、`ALL` 与 `GRANT OPTION`**（授权不可再转授）；权限去空、去重、统一大写。
 - 所有写方法的 `database` / `name` / `table` / `charset` / `collation` 都过同一套白名单正则；拼 SQL 时标识符再用反引号包裹，绝不让用户输入以带引号字符串形式进入 SQL。

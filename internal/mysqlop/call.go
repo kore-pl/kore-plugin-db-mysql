@@ -38,6 +38,8 @@ func Call(method string, params json.RawMessage, cfg Config, exec Executor) (jso
 		return callDropDatabase(params, cfg, exec)
 	case "createUser":
 		return callCreateUser(params, cfg, exec)
+	case "changePassword":
+		return callChangePassword(params, cfg, exec)
 	case "dropUser":
 		return callDropUser(params, cfg, exec)
 	case "grant":
@@ -63,7 +65,7 @@ func businessVerb(method string) (string, bool) {
 	}
 	switch verb {
 	case "instances", "databases", "query", "status",
-		"createDatabase", "dropDatabase", "createUser", "dropUser", "grant",
+		"createDatabase", "dropDatabase", "createUser", "changePassword", "dropUser", "grant",
 		"export", "import", "slowlog":
 		return verb, true
 	}

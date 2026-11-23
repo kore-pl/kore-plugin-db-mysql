@@ -90,6 +90,7 @@ type Executor interface {
 	CreateDatabase(instance InstanceConfig, name, charset, collation string) (bool, error)
 	DropDatabase(instance InstanceConfig, name string) (bool, error)
 	CreateUser(instance InstanceConfig, user, host, password string) (bool, error)
+	ChangePassword(instance InstanceConfig, user, host, password string) (bool, error)
 	DropUser(instance InstanceConfig, user, host string) (bool, error)
 	Grant(instance InstanceConfig, user, host, database string, privileges []string) error
 	Export(instance InstanceConfig, database string, tables []string, filePath string) (int64, error)

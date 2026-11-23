@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 (2026-11-23)
+
+- feat: 改密方法 `db-mysql.changePassword`（`system:admin`）——入参 `{instance, user, password, host?}`，执行 `ALTER USER 'u'@'h' IDENTIFIED BY ?`；补上 §3.5 #2「改密需要单独方法」的最后缺口
+- security: 改密语句的代码层参数绑定（模板 `ALTER USER ... IDENTIFIED BY ?` 不含密码，绑定值在 `stringLiteral` 单点按服务端 `sql_mode` 转义，仅经 stdin 传给 mysql 客户端）；密码不进 argv / 日志 / 结果体，错误消息统一脱敏为 `***`
+- security: user/host 沿用 `[a-zA-Z0-9_]` / host 白名单（引号、分号、反引号直接 `E_INVALID`，不触达执行面）；新密码强度 ≥8 字节、不得与账号同名、≤1024 且无 NUL；root 受保护账号改密缺 `confirm=true` 回 `E_INVALID` 并给可操作 hint（`mysql.sys` 等含点账号本就被白名单拒绝）
+- feat: MySQL 错误号映射人话——`ER_ACCESS_DENIED`(1045)/`ER_SPECIFIC_ACCESS_DENIED_ERROR`(1227/1142) → `E_UNAUTHORIZED`，`ER_CANNOT_USER`(1396) → `E_NOTFOUND`，`ER_NOT_VALID_PASSWORD`(1819) → `E_INVALID`；成功只返回 `{user,host,changed:true}`
+- chore: `method_capabilities` 增加 `db-mysql.changePassword: system:admin` 与既有 `db-mysql.slowlog: system:read`（此前声明缺项，本次一致性门禁收口）；新增表驱动 capability 一致性测试
+- test: 参数化断言（模板无密码、绑定后仅出现一次、引号/反斜杠按 sql_mode 转义、占位符数量严格匹配）、标识符注入拒绝、缺 confirm 拒绝、弱密码拒绝、错误码映射与密码脱敏、结果不含密码、非 admin 拒绝；`tests/fault` 故障矩阵同步
+- build: 版本 0.3.2 → 0.4.0（新增方法 = minor），`info.json` / `manifest.json` 同步
+
 ## 0.3.2 (2026-11-23)
 
 - feat: 慢查询分析 `db-mysql.slowlog`（只读，`system:read`）——从 `performance_schema.events_statements_summary_by_digest` 读取按 digest 聚合的慢查询，返回 SQL 摘要、库名、执行次数、总/平均/最大耗时（ms）、平均扫描/返回行数与首末出现时间；支持 `instance`（必填）、`schema`（可选）、`min_ms`（0–3600000）、`limit`（1–100，缺省 20，按总耗时倒序）

@@ -80,6 +80,10 @@ func (f faultExecutor) CreateUser(instance mysqlop.InstanceConfig, user, host, p
 	return false, f.fail("createUser")
 }
 
+func (f faultExecutor) ChangePassword(instance mysqlop.InstanceConfig, user, host, password string) (bool, error) {
+	return false, f.fail("changePassword")
+}
+
 func (f faultExecutor) DropUser(instance mysqlop.InstanceConfig, user, host string) (bool, error) {
 	return false, f.fail("dropUser")
 }
@@ -127,6 +131,10 @@ func (okExecutor) CreateUser(instance mysqlop.InstanceConfig, user, host, passwo
 	return true, nil
 }
 
+func (okExecutor) ChangePassword(instance mysqlop.InstanceConfig, user, host, password string) (bool, error) {
+	return true, nil
+}
+
 func (okExecutor) DropUser(instance mysqlop.InstanceConfig, user, host string) (bool, error) {
 	return true, nil
 }
@@ -157,6 +165,7 @@ var methods = []struct {
 	{"dropDatabase", "db-mysql.dropDatabase", `{"instance":"primary","name":"kore_fault","confirm":true}`},
 	{"createUser", "db-mysql.createUser", `{"instance":"primary","user":"kore_fault_user"}`},
 	{"dropUser", "db-mysql.dropUser", `{"instance":"primary","user":"kore_fault_user","confirm":true}`},
+	{"changePassword", "db-mysql.changePassword", `{"instance":"primary","user":"kore_fault_user","password":"Str0ngPass!","confirm":true}`},
 	{"grant", "db-mysql.grant", `{"instance":"primary","user":"kore_fault_user","database":"kore_fault","privileges":["SELECT"]}`},
 	{"export", "db-mysql.export", `{"instance":"primary","database":"kore_fault","file_path":"fault.sql"}`},
 	{"import", "db-mysql.import", `{"instance":"primary","database":"kore_fault","file_path":"fault-seed.sql"}`},

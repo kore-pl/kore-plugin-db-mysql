@@ -83,6 +83,12 @@ func (f *fakeExecutor) CreateUser(instance InstanceConfig, user, host, password 
 	return f.created, f.err
 }
 
+func (f *fakeExecutor) ChangePassword(instance InstanceConfig, user, host, password string) (bool, error) {
+	f.adminCalls++
+	f.lastUser, f.lastHost, f.lastPassword = user, host, password
+	return f.created, f.err
+}
+
 func (f *fakeExecutor) DropUser(instance InstanceConfig, user, host string) (bool, error) {
 	f.adminCalls++
 	f.lastUser, f.lastHost = user, host
@@ -122,7 +128,7 @@ func callTestConfig() Config {
 func TestBusinessVerb(t *testing.T) {
 	for _, verb := range []string{
 		"instances", "databases", "query", "status",
-		"createDatabase", "dropDatabase", "createUser", "dropUser", "grant", "export", "import", "slowlog",
+		"createDatabase", "dropDatabase", "createUser", "changePassword", "dropUser", "grant", "export", "import", "slowlog",
 	} {
 		method := "db-mysql." + verb
 		got, ok := businessVerb(method)
