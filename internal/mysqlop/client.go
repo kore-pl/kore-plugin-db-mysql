@@ -83,6 +83,8 @@ func (c *Client) probe(instance InstanceConfig) InstanceStatus {
 		Host: instance.Host,
 		Port: instance.Port,
 	}
+	// 凭据来源只报「从哪来」，绝不回显口令本身（G-30）。
+	_, status.CredentialSource = resolveCredential(instance)
 	rows, err := c.run(instance, "SELECT 1, VERSION()", true, true)
 	if err != nil {
 		status.Error = errorText(err)

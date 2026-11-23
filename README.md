@@ -65,7 +65,7 @@ MySQL/MariaDB 管理插件：真实探测实例、列库、执行只读查询、
 
 | 方法 | 入参 | 结果 |
 | --- | --- | --- |
-| `db-mysql.instances` | `instance`（可选，限定单个实例） | `{instances:[{name,host,port,reachable,version,error}],count}` |
+| `db-mysql.instances` | `instance`（可选，限定单个实例） | `{instances:[{name,host,port,reachable,version,error,credential_source}],count}`（`credential_source ∈ kernel_env|plugin_config|none`，只报来源不含口令） |
 | `db-mysql.databases` | `instance`（必填）、`include_system`（可选，默认 false） | `{instance,databases:[...],count}` |
 | `db-mysql.query` | `instance`（必填）、`sql`（必填）、`limit`（可选，默认 100，上限 1000） | `{columns,rows,row_count,truncated}` |
 | `db-mysql.status` | `instance`（必填） | `{instance,version,max_connections,threads_connected,uptime_s,queries,slow_queries}` |

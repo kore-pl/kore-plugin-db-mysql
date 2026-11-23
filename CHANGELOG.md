@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1 (2026-11-23)
+
+- feat: 优先采用内核注入凭据（ADR-0026 / §3.5 #8）——默认实例若存在 `MYSQL_PWD` 环境变量（内核按凭据授权注入），
+  直接使用且**不再读取插件 config 口令**；缺失才回落既有 config（`password` / `password_env`），向后兼容、不破坏既有部署
+- feat: `db-mysql.instances` 新增只读诊断 `credential_source ∈ kernel_env|plugin_config|none`，让 UI 与排障能看出凭据来自内核注入还是插件配置（只报来源，不含口令）
+- security: 口令仍只进子进程环境（不进 argv / 日志 / 响应 / 落盘）；`config.get` 口令字段继续打码 `***`；多实例的非默认实例不被默认实例的内核凭据覆盖
+
 ## 0.4.0 (2026-11-23)
 
 - feat: 改密方法 `db-mysql.changePassword`（`system:admin`）——入参 `{instance, user, password, host?}`，执行 `ALTER USER 'u'@'h' IDENTIFIED BY ?`；补上 §3.5 #2「改密需要单独方法」的最后缺口

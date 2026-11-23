@@ -58,6 +58,8 @@ type InstanceStatus struct {
 	Reachable bool   `json:"reachable"`
 	Version   string `json:"version"`
 	Error     string `json:"error"`
+	// CredentialSource 是本次探测使用的凭据来源：kernel_env | plugin_config | none（只读诊断，不含口令）。
+	CredentialSource string `json:"credential_source"`
 }
 
 // Config 是插件运行期 MySQL 配置。

@@ -1,12 +1,14 @@
 {
   "id": "db-mysql",
   "name": "MySQL/MariaDB 管理插件",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "protocol": "kore.plugin.v1",
   "lifecycle": "lazy",
   "depth_level": "production",
   "entry": "bin/db-mysql",
-  "capabilities": ["system:admin"],
+  "capabilities": [
+    "system:admin"
+  ],
   "method_capabilities": {
     "db-mysql.config.get": "system:read",
     "db-mysql.instances": "system:read",
@@ -22,14 +24,21 @@
     "db-mysql.grant": "system:admin",
     "db-mysql.export": "system:admin",
     "db-mysql.import": "system:admin",
-    "db-mysql.slowlog": "system:read",
     "db-mysql.slowlog": "system:read"
   },
   "triggers": [],
   "requires_kore": ">=0.1.0 <0.2.0",
-  "resources": {"memory_mb": 8, "cpu_quota": "20%", "pids_max": 32},
+  "resources": {
+    "memory_mb": 8,
+    "cpu_quota": "20%",
+    "pids_max": 32
+  },
   "depends_on": [],
-  "conflicts": ["db-postgres"],
-  "scenario_tags": ["data"],
-  "size_bytes": 1575080
+  "conflicts": [
+    "db-postgres"
+  ],
+  "scenario_tags": [
+    "data"
+  ],
+  "size_bytes": 1576481
 }
