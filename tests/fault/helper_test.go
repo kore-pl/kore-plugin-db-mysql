@@ -160,6 +160,7 @@ var methods = []struct {
 	{"grant", "db-mysql.grant", `{"instance":"primary","user":"kore_fault_user","database":"kore_fault","privileges":["SELECT"]}`},
 	{"export", "db-mysql.export", `{"instance":"primary","database":"kore_fault","file_path":"fault.sql"}`},
 	{"import", "db-mysql.import", `{"instance":"primary","database":"kore_fault","file_path":"fault-seed.sql"}`},
+	{"slowlog", "db-mysql.slowlog", `{"instance":"primary"}`},
 }
 
 // assertFault 对每个方法注入故障，断言返回 nil 结果 + 预期错误码与类别关键词。

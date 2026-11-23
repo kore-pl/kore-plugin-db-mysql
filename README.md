@@ -69,11 +69,13 @@ MySQL/MariaDB 管理插件：真实探测实例、列库、执行只读查询、
 | `db-mysql.databases` | `instance`（必填）、`include_system`（可选，默认 false） | `{instance,databases:[...],count}` |
 | `db-mysql.query` | `instance`（必填）、`sql`（必填）、`limit`（可选，默认 100，上限 1000） | `{columns,rows,row_count,truncated}` |
 | `db-mysql.status` | `instance`（必填） | `{instance,version,max_connections,threads_connected,uptime_s,queries,slow_queries}` |
+| `db-mysql.slowlog` | `instance`（必填）、`schema`（可选）、`min_ms`（可选，0–3600000）、`limit`（可选，1–100，默认 20） | `{instance,source,schema,min_ms,limit,count,queries:[{schema,digest,sql_text,executions,total_ms,avg_ms,max_ms,rows_examined_avg,rows_sent_avg,first_seen,last_seen}],warnings?,hint}` |
 
 - `db-mysql.instances`：对每个实例执行 `SELECT 1, VERSION()`；单实例失败只写入该实例的 `error` 字段（其余实例照常返回），返回值中**永远没有密码**
 - `db-mysql.databases`：`SHOW DATABASES`，默认过滤 `information_schema` / `mysql` / `performance_schema` / `sys`
 - `db-mysql.query`：只读白名单（见下节），结果按列名编码为对象；NULL → JSON `null`，规范数字 → JSON number，其余 → string；列名重复时追加 `_2`、`_3`
 - `db-mysql.status`：`SHOW STATUS` 的 `Threads_connected` / `Uptime` / `Queries` / `Slow_queries` + `SHOW VARIABLES` 的 `version` / `max_connections`
+- `db-mysql.slowlog`：读 `performance_schema.events_statements_summary_by_digest`（按总耗时倒序，可按库与 `min_ms` 过滤），不读 `slow_query_log` 文件、不接受调用方 SQL；需要 `performance_schema=ON` 且账号有 SELECT 权限
 
 ### 日常管理（L2，全部要求 `system:admin`）
 

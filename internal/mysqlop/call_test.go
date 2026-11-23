@@ -122,7 +122,7 @@ func callTestConfig() Config {
 func TestBusinessVerb(t *testing.T) {
 	for _, verb := range []string{
 		"instances", "databases", "query", "status",
-		"createDatabase", "dropDatabase", "createUser", "dropUser", "grant", "export", "import",
+		"createDatabase", "dropDatabase", "createUser", "dropUser", "grant", "export", "import", "slowlog",
 	} {
 		method := "db-mysql." + verb
 		got, ok := businessVerb(method)

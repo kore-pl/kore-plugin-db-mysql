@@ -46,6 +46,8 @@ func Call(method string, params json.RawMessage, cfg Config, exec Executor) (jso
 		return callExport(params, cfg, exec)
 	case "import":
 		return callImport(params, cfg, exec)
+	case "slowlog":
+		return callSlowlog(params, cfg, exec)
 	}
 	return nil, errNotFound(method)
 }
@@ -62,7 +64,7 @@ func businessVerb(method string) (string, bool) {
 	switch verb {
 	case "instances", "databases", "query", "status",
 		"createDatabase", "dropDatabase", "createUser", "dropUser", "grant",
-		"export", "import":
+		"export", "import", "slowlog":
 		return verb, true
 	}
 	return "", false

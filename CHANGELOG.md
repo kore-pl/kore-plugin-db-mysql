@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2 (2026-11-23)
+
+- feat: 慢查询分析 `db-mysql.slowlog`（只读，`system:read`）——从 `performance_schema.events_statements_summary_by_digest` 读取按 digest 聚合的慢查询，返回 SQL 摘要、库名、执行次数、总/平均/最大耗时（ms）、平均扫描/返回行数与首末出现时间；支持 `instance`（必填）、`schema`（可选）、`min_ms`（0–3600000）、`limit`（1–100，缺省 20，按总耗时倒序）
+- security: 不读 `slow_query_log` 文件（需 FILE 权限与宿主日志路径，跨主机不可移植），不接受调用方 SQL；失败 hint 指明 `performance_schema=ON` 与 SELECT 授权要求
+- chore: `method_capabilities` 增加 `db-mysql.slowlog: system:read`；`tests/fault` 故障矩阵同步
+
 ## 0.3.1 (2026-11-23)
 
 - feat: 声明方法级能力 `method_capabilities`——`config.get` / `instances` / `databases` / `query` / `status` 为 `system:read`，`config.set` / `createDatabase` / `dropDatabase` / `createUser` / `dropUser` / `grant` / `export` / `import` 为 `system:admin`；内核按方法取用，只读方法不再被当成 admin 类
