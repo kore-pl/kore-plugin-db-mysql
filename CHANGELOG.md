@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 (2026-11-23)
+
+- feat: 声明方法级能力 `method_capabilities`——`config.get` / `instances` / `databases` / `query` / `status` 为 `system:read`，`config.set` / `createDatabase` / `dropDatabase` / `createUser` / `dropUser` / `grant` / `export` / `import` 为 `system:admin`；内核按方法取用，只读方法不再被当成 admin 类
+- refactor: 审计口径随方法级能力收口——`db-mysql.instances` 等只读方法 10 次调用审计增量 0 条（此前 10 条），写方法仍 1 条；单用户模式下授权仍全放行，方法级能力只在审计侧生效
+- docs: 只读/写方法清单与内核审计口径见 `kore` 仓 `docs/PLUGIN-PROTOCOL.md` §3.1.2.1
+
 ## 0.3.0 (2026-11-23)
 
 - feat: L2 日常管理能力——`db-mysql.createDatabase`（`CREATE DATABASE IF NOT EXISTS`，默认 `utf8mb4`/`utf8mb4_unicode_ci`）、`db-mysql.dropDatabase`、`db-mysql.createUser`、`db-mysql.dropUser`、`db-mysql.grant`（7 个有真实副作用的方法/方法对）

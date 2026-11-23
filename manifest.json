@@ -1,9 +1,24 @@
 {
   "id": "db-mysql",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "protocol": "kore.plugin.v1",
   "requires_kore": ">=0.1.0 <0.2.0",
   "capabilities": [
     "system:admin"
-  ]
+  ],
+  "method_capabilities": {
+    "db-mysql.config.get": "system:read",
+    "db-mysql.instances": "system:read",
+    "db-mysql.databases": "system:read",
+    "db-mysql.query": "system:read",
+    "db-mysql.status": "system:read",
+    "db-mysql.config.set": "system:admin",
+    "db-mysql.createDatabase": "system:admin",
+    "db-mysql.dropDatabase": "system:admin",
+    "db-mysql.createUser": "system:admin",
+    "db-mysql.dropUser": "system:admin",
+    "db-mysql.grant": "system:admin",
+    "db-mysql.export": "system:admin",
+    "db-mysql.import": "system:admin"
+  }
 }
