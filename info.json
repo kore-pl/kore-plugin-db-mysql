@@ -1,7 +1,7 @@
 {
   "id": "db-mysql",
   "name": "MySQL/MariaDB 管理插件",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "protocol": "kore.plugin.v1",
   "lifecycle": "lazy",
   "depth_level": "production",
@@ -14,6 +14,7 @@
     "db-mysql.instances": "system:read",
     "db-mysql.databases": "system:read",
     "db-mysql.query": "system:read",
+    "db-mysql.exec": "system:admin",
     "db-mysql.status": "system:read",
     "db-mysql.config.set": "system:admin",
     "db-mysql.createDatabase": "system:admin",
@@ -40,5 +41,5 @@
   "scenario_tags": [
     "data"
   ],
-  "size_bytes": 1576481
+  "size_bytes": 1579604
 }

@@ -127,7 +127,7 @@ func callTestConfig() Config {
 // TestBusinessVerb 方法名归一化：只接受 db-mysql.<verb>，域不符或裸动词一律拒绝。
 func TestBusinessVerb(t *testing.T) {
 	for _, verb := range []string{
-		"instances", "databases", "query", "status",
+		"instances", "databases", "query", "exec", "status",
 		"createDatabase", "dropDatabase", "createUser", "changePassword", "dropUser", "grant", "export", "import", "slowlog",
 	} {
 		method := "db-mysql." + verb
@@ -137,7 +137,7 @@ func TestBusinessVerb(t *testing.T) {
 		}
 	}
 	rejected := []string{
-		"db-mysql.exec",          // 未知动词
+		"db-mysql.run",           // 未知动词
 		"db-mysql.slowQueries",   // 未知动词
 		"db-mysql.instances.foo", // 多一段
 		"mysql.instances",        // 旧域（协议不一致）
@@ -321,7 +321,7 @@ func TestCallStatus(t *testing.T) {
 
 // TestCallUnknownMethod 未知方法返回 E_NOTFOUND。
 func TestCallUnknownMethod(t *testing.T) {
-	_, perr := Call("db-mysql.exec", json.RawMessage(`{}`), callTestConfig(), &fakeExecutor{})
+	_, perr := Call("db-mysql.unknownVerb", json.RawMessage(`{}`), callTestConfig(), &fakeExecutor{})
 	if perr == nil || perr.Code != pluginapi.E_NOTFOUND {
 		t.Fatalf("未知方法错误=%v，期望 E_NOTFOUND", perr)
 	}

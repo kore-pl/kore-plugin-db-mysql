@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0 (2026-11-24)
+
+- feat: 新增写语句方法 `db-mysql.exec`（`system:admin`）——把「数据库管理」从只读查询补齐到可改数据/结构：入参 `{instance, sql, confirm, confirm_text?}`，返回 `{instance, kind, executed, columns, rows, row_count}`
+- security: **两级确认**取代「一刀切只读」——`INSERT/UPDATE/DELETE/REPLACE` 只要 `confirm=true`（数据行级、可重放）；`DROP/TRUNCATE/ALTER/CREATE/RENAME/GRANT/REVOKE/FLUSH/SET/CALL` 必须 `confirm_text` 手打语句首两个关键字（如 `DROP TABLE`），错误信息直接给出应填短语
+- security: 写能力**不借道** `db-mysql.query`——query 仍 `system:read` 只读白名单，exec 单独 `system:admin`；只读操作员拿不到 DROP 权限（方法级 capability 是授权面，不能靠 UI 挡）
+- security: 写入白名单共用只读侧的清洗纪律——单条语句（分号只在末尾）、拒 NUL / 反斜杠客户端命令 / 可执行注释 / `INTO OUTFILE|DUMPFILE` / `LOAD_FILE` / `SLEEP|BENCHMARK` / 命名锁 / 超 64 KiB；`LOAD DATA` 明确拒绝（读宿主文件）
+- test: 新增 `writeguard_test.go`（放行 10 例 + 拒绝 14 例 + `callExec` 三级断言：未确认不触达执行面、合法写带回分级、ddl 缺短语带可执行提示）；方法表与 capability 一致性表同步
+- chore: 版本 0.4.1 → 0.5.0（新增方法 = minor），`info.json` / `manifest.json` 同步
+- 未做（留待后续）：表结构浏览 `describeTable`、分页数据浏览 `selectRows`、独立 `import` 文件上传通道——本轮只交付 P0「SQL 控制台能写」
+
 ## 0.4.1 (2026-11-23)
 
 - feat: 优先采用内核注入凭据（ADR-0026 / §3.5 #8）——默认实例若存在 `MYSQL_PWD` 环境变量（内核按凭据授权注入），

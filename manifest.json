@@ -1,6 +1,6 @@
 {
   "id": "db-mysql",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "protocol": "kore.plugin.v1",
   "requires_kore": ">=0.1.0 <0.2.0",
   "capabilities": [
@@ -11,6 +11,7 @@
     "db-mysql.instances": "system:read",
     "db-mysql.databases": "system:read",
     "db-mysql.query": "system:read",
+    "db-mysql.exec": "system:admin",
     "db-mysql.status": "system:read",
     "db-mysql.config.set": "system:admin",
     "db-mysql.createDatabase": "system:admin",

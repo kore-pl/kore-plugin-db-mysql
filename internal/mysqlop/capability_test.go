@@ -12,6 +12,7 @@ var capabilityTestExpected = map[string]string{
 	"db-mysql.instances":      "system:read",
 	"db-mysql.databases":      "system:read",
 	"db-mysql.query":          "system:read",
+	"db-mysql.exec":           "system:admin",
 	"db-mysql.status":         "system:read",
 	"db-mysql.slowlog":        "system:read",
 	"db-mysql.config.set":     "system:admin",

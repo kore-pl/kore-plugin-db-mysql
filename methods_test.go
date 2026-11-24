@@ -39,7 +39,7 @@ func TestDispatchReject(t *testing.T) {
 		{"db-mysql.query", `{"instance":"primary","sql":"INSERT INTO t VALUES (1)"}`, pluginapi.E_INVALID},
 		{"db-mysql.query", `{"instance":"primary","sql":"SELECT 1","limit":5000}`, pluginapi.E_INVALID},
 		{"db-mysql.status", `{"instance":"missing"}`, pluginapi.E_NOTFOUND},
-		{"db-mysql.exec", `{}`, pluginapi.E_NOTFOUND},
+		{"db-mysql.exec", `{"instance":"primary","sql":"SELECT 1","confirm":true}`, pluginapi.E_INVALID},
 		{"db-mysql.slowQueries", `{"instance":"primary"}`, pluginapi.E_NOTFOUND},
 	}
 	for _, c := range cases {
