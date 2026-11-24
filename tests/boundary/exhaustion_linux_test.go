@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -73,5 +74,40 @@ func TestResourceExhaustionExportFileSizeLimit(t *testing.T) {
 	target := filepath.Join(cfg.ExportDir, "limited.sql")
 	if _, err := os.Stat(target); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("失败后残留半成品导出文件 %s（stat err=%v）", target, err)
+	}
+}
+
+// TestResourceExhaustionClientAddressSpaceLimit 资源耗尽（真实 ulimit -v / RLIMIT_AS）：
+// 假客户端先 `ulimit -v 65536`（64 MiB）再 exec 测试二进制——Go 运行时在 64 MiB 地址空间内
+// 启动即失败。插件必须返回结构化 E_UPSTREAM（而不是挂起/崩溃）；控制组去掉 ulimit，
+// 同一条路径能正常返回，证明失败只来自地址空间限额。
+func TestResourceExhaustionClientAddressSpaceLimit(t *testing.T) {
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatalf("定位测试二进制失败: %v", err)
+	}
+	quotedSelf := "'" + strings.ReplaceAll(self, "'", `'\''`) + "'"
+	dir := t.TempDir()
+
+	control := writeScript(t, dir, "mysql-control",
+		"#!/bin/sh\nexec "+quotedSelf+" -test.run=^$\n")
+	limited := writeScript(t, dir, "mysql-limited",
+		"#!/bin/sh\nulimit -v 65536 2>/dev/null || exit 97\nexec "+quotedSelf+" -test.run=^$\n")
+
+	params := json.RawMessage(`{"instance":"primary","sql":"SELECT 1"}`)
+	if _, perr := mysqlop.Call("db-mysql.query", params,
+		boundaryConfig(control, "", ""), nil); perr != nil {
+		t.Fatalf("控制组（无限额）不应失败: %v", perr)
+	}
+
+	_, perr := mysqlop.Call("db-mysql.query", params, boundaryConfig(limited, "", ""), nil)
+	if perr == nil {
+		t.Fatal("ulimit -v 64 MiB 下客户端未失败，注入无效")
+	}
+	if perr.Code != pluginapi.E_UPSTREAM {
+		t.Fatalf("错误码=%q，期望 E_UPSTREAM（message=%q）", perr.Code, perr.Message)
+	}
+	if !strings.Contains(perr.Message, "客户端失败") {
+		t.Fatalf("错误信息未指向客户端失败: %q", perr.Message)
 	}
 }
