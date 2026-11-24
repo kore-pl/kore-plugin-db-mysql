@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.2 (2026-11-24)
+
+- fix: `Client.Instances` 不再把**本地进程创建失败**降级成「实例不可达」。旧实现把所有探测错误一律写成 per-instance `{reachable:false, error:"…"}`——运维看到 `reachable:false` 会去查网络 / 防火墙 / 端口，而真凶是宿主 `fork` 预算（ETXTBSY / EAGAIN / EMFILE / ENFILE / ENOMEM / EINTR）。现按归因分流：本地 `fork/exec` 失败（`*os.PathError{Op:"fork/exec"}`，复用 0.5.1 的 `isLocalForkFailure`）→ **整个 `db-mysql.instances` 返回错误**，错误码 `E_UPSTREAM`（可重试语义不变），且**不返回半张表**——半张表同样会被读成「实例不可达」
+- feat(归因): 新增 `probeAttribution` 三分类 + `attributeProbeError`，判据结构化（`errors.As` 到 `*os.PathError` / `*exec.ExitError` / `context.DeadlineExceeded`），不匹配自己写的中文文案：
+  - **真不可达**（客户端已运行、stderr 命中连接层片段：2002 / 2003 / 2005 / 2013、Connection refused、timed out、DNS 解析失败；或整体超时）→ 保留 `reachable:false`，语义不变
+  - **宿主失败**（fork/exec）→ 整体返错，不进 per-instance 结果
+  - **未知归因**（1045/1044 鉴权、SQL 错、空 stderr、输出解析失败）→ 保留 per-instance 结果（单个实例的凭据问题不该毒化整张表），但文案加前缀「探测失败（非网络不可达，请先排查凭据与客户端）」，把排查方向指回凭据与客户端；「探测返回空结果」同样归此类
+- refactor: `OpError` 新增 `cause` 字段 + `Unwrap()`，只为结构化归因服务，不参与 `Error()`／JSON（`Code` / `Message` 语义与响应零变化）；`timeoutError` 的 cause 固定为 `context.DeadlineExceeded`
+- test: 新增 `internal/mysqlop/probe_attribution_test.go`（归因判据表：EAGAIN/EMFILE/ENFILE/ENOMEM/ETXTBSY/EINTR → 宿主；超时与连接层 → 不可达；1045/1044/1064/空输出 → 未知。外加本地失败返错、真不可达仍 false、鉴权打标签）与 `tests/boundary/probe_attribution_test.go`（运维视角：方法返回 `E_UPSTREAM` 且不返回 per-instance 负载）。**未放宽任何既有断言**——`tests/boundary/concurrency_test.go` 与既有单测一行未改
+- test(反例自证): 把 `probe` 还原成旧行为（所有错误落 per-instance）后，两个新用例均 FAIL，旧输出原文 `{"reachable":false,…,"error":"本地进程创建失败（…）: fork/exec …: exec format error"}`——证明用例真的在守这条缺陷
+- test(压测): 8 路并发 × `-count=40`（合计 320 轮、约 4.6 万次真实 `fork/exec`）`TestConcurrentInstanceProbes` 全绿，0 命中
+- 已知边界（诚实标注）: `reachable` 仍是 `bool`，表达不了三态；「未知归因」当前只能靠文案标签区分。若需要机器可读，应加 `error_kind` 字段——属协议变更，本轮不做，避免与「不改 E_UPSTREAM 语义」的约束撞车
+- chore: 版本 0.5.1 → 0.5.2（fix = patch），`info.json` / `manifest.json` 同步
+
 ## 0.5.1 (2026-11-24)
 
 - fix: `execError` 不再把**本地进程创建失败**误报成「上游 MySQL 失败且无错误输出」。`fork/exec` 返回 `ETXTBSY`（text file busy）/`EAGAIN`/`EMFILE`/`ENFILE`/`ENOMEM`/`EINTR` 时，旧实现只带 stderr（这类错误 stderr 必为空）→ 落成 `E_UPSTREAM: mysql 客户端失败: mysql 客户端无错误输出`，把宿主进程创建失败误导成数据库故障；现按 `*os.PathError{Op:"fork/exec"}` 识别，message 带出 `errno`（`本地进程创建失败（<bin>）: fork/exec ...`），错误码仍为 `E_UPSTREAM`（可重试语义不变，不破坏下游映射）

@@ -59,12 +59,24 @@ func (c *Client) Instances(instances []InstanceConfig) ([]InstanceStatus, error)
 	}
 	jobs := make(chan int)
 	var wg sync.WaitGroup
+	var abortMu sync.Mutex
+	var abortErr error
 	wg.Add(workers)
 	for w := 0; w < workers; w++ {
 		go func() {
 			defer wg.Done()
 			for i := range jobs {
-				statuses[i] = c.probe(instances[i])
+				status, perr := c.probe(instances[i])
+				if perr != nil {
+					// 非实例归因的失败（宿主进程创建失败）：整体返错，见 probe 的注释。
+					abortMu.Lock()
+					if abortErr == nil {
+						abortErr = perr
+					}
+					abortMu.Unlock()
+					continue
+				}
+				statuses[i] = status
 			}
 		}()
 	}
@@ -73,11 +85,21 @@ func (c *Client) Instances(instances []InstanceConfig) ([]InstanceStatus, error)
 	}
 	close(jobs)
 	wg.Wait()
+	if abortErr != nil {
+		// 不返回部分结果：宿主进程创建失败时，其余实例的 false 同样不可信，
+		// 返回半张表只会让运维按「实例不可达」排查网络。
+		return nil, abortErr
+	}
 	return statuses, nil
 }
 
 // probe 做一次连通性探测并取回版本；错误文本不含密码。
-func (c *Client) probe(instance InstanceConfig) InstanceStatus {
+//
+// 返回值 error **只用于不能归因到该实例的失败**（本地进程创建失败）：
+// 这类失败与目标实例无关，是宿主 fork/exec 预算问题，调用方必须整体返错，
+// 不能降级成 Reachable:false——否则运维会去查网络/防火墙/端口，而真凶是宿主机。
+// 可归因到实例的失败（真连不上 / 未知归因）写进 status.Error，不影响其它实例。
+func (c *Client) probe(instance InstanceConfig) (InstanceStatus, error) {
 	status := InstanceStatus{
 		Name: instance.Name,
 		Host: instance.Host,
@@ -87,16 +109,20 @@ func (c *Client) probe(instance InstanceConfig) InstanceStatus {
 	_, status.CredentialSource = resolveCredential(instance)
 	rows, err := c.run(instance, "SELECT 1, VERSION()", true, true)
 	if err != nil {
-		status.Error = errorText(err)
-		return status
+		attribution, text := attributeProbeError(err)
+		if attribution == probeHostFailure {
+			return InstanceStatus{}, err
+		}
+		status.Error = text
+		return status, nil
 	}
 	if len(rows) == 0 || len(rows[0]) < 2 {
-		status.Error = "连通性探测返回空结果"
-		return status
+		status.Error = probeUnknownPrefix + "连通性探测返回空结果"
+		return status, nil
 	}
 	status.Reachable = true
 	status.Version = rows[0][1]
-	return status
+	return status, nil
 }
 
 // Databases 执行 SHOW DATABASES，默认过滤四个系统库。
@@ -348,6 +374,75 @@ func isLocalForkFailure(err error) bool {
 	return errors.As(err, &pathErr) && pathErr.Op == "fork/exec"
 }
 
+// probeAttribution 是探测失败的归因类别——决定「实例不可达」还是「整体返错」。
+//
+// 为什么需要分类：`Instances` 的 per-instance 结果是 `Reachable bool`，一旦把
+// 非实例原因写进去，就只能表达成 `reachable:false` = 「实例不可达」，运维会去查
+// 网络 / 防火墙 / 端口。归因错了，排查方向就全错。
+type probeAttribution int
+
+const (
+	// probeUnreachable：客户端已跑起来、**连接层**失败（拒连 / 连接超时 / DNS 解析失败）。
+	// 这就是「实例不可达」，保留 Reachable:false 语义不变。
+	probeUnreachable probeAttribution = iota
+	// probeHostFailure：本地进程创建失败（fork/exec：ETXTBSY / EAGAIN / EMFILE /
+	// ENFILE / ENOMEM / EINTR）。与目标实例无关，是宿主预算问题 → 整体返错，不降级。
+	probeHostFailure
+	// probeUnknown：无法归因到网络（鉴权失败 / SQL 错 / 空 stderr / 输出解析失败）。
+	// 既不升级成整体错误（单个实例的凭据问题不该毒化整张表），也**不能**伪装成
+	// 「网络不可达」——文案必须带 probeUnknownPrefix，把排查方向指回凭据与客户端。
+	probeUnknown
+)
+
+// probeUnknownPrefix 是「未知归因」探测失败的统一前缀，与网络不可达在文案上可区分。
+const probeUnknownPrefix = "探测失败（非网络不可达，请先排查凭据与客户端）: "
+
+// networkFailureMarkers 是 mysql/mariadb 客户端**连接层**失败的稳定片段（2002/2003/
+// 2013 与 errno 110/111/113/115 的文本形态）。命中即判定实例不可达。
+//
+// 只列连接层片段：1045（Access denied）、SQL 语法错、1044/1142 权限不足都不在此列——
+// 它们证明链路是通的，归 probeUnknown，不能让运维按网络排查。
+var networkFailureMarkers = []string{
+	"Can't connect to MySQL server",
+	"Can't connect to local MySQL server",
+	"Unknown MySQL server host",
+	"Lost connection to MySQL server",
+	"Connection refused",
+	"Connection timed out",
+	"Operation timed out",
+	"No route to host",
+	"Network is unreachable",
+	"Name or service not known",
+	"Temporary failure in name resolution",
+	"getaddrinfo",
+}
+
+// attributeProbeError 给一次探测失败定性，并给出 per-instance error 文案。
+//
+// 判据顺序（结构化优先，不靠匹配自己写的中文文案）：
+//  1. fork/exec 的 *os.PathError → probeHostFailure（宿主预算，见 isLocalForkFailure）；
+//  2. context.DeadlineExceeded → probeUnreachable（连接/整体超时，实例不可达）；
+//  3. 客户端真跑起来的 *exec.ExitError 且 stderr 命中 networkFailureMarkers → probeUnreachable；
+//  4. 其余 → probeUnknown（带 probeUnknownPrefix）。
+func attributeProbeError(err error) (probeAttribution, string) {
+	if isLocalForkFailure(err) {
+		return probeHostFailure, ""
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return probeUnreachable, errorText(err)
+	}
+	text := errorText(err)
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		for _, marker := range networkFailureMarkers {
+			if strings.Contains(text, marker) {
+				return probeUnreachable, text
+			}
+		}
+	}
+	return probeUnknown, probeUnknownPrefix + text
+}
+
 // execError 把客户端启动/执行失败映射为协议错误；stderr 先脱敏再截断。
 func (c *Client) execError(err error, password, stderr string) *OpError {
 	var execErr *exec.Error
@@ -361,11 +456,14 @@ func (c *Client) execError(err error, password, stderr string) *OpError {
 	// 带出 errno：诊断能区分「本地进程创建失败（ETXTBSY/EAGAIN…）」与「被测路径真失败」，
 	// 并发用例也据此只对本地创建错误重试（断言强度不变）。
 	if isLocalForkFailure(err) {
-		return opErrorf(pluginapi.E_UPSTREAM, "本地进程创建失败（%s）: %v", c.bin, err)
+		op := opErrorf(pluginapi.E_UPSTREAM, "本地进程创建失败（%s）: %v", c.bin, err)
+		op.cause = err
+		return op
 	}
 	return &OpError{
 		Code:    pluginapi.E_UPSTREAM,
 		Message: "mysql 客户端失败: " + sanitizeStderr(stderr, password),
+		cause:   err,
 	}
 }
 
