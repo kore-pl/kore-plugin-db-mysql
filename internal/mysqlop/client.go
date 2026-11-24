@@ -333,12 +333,35 @@ func buildCommandEnv(password string) []string {
 	return env
 }
 
+// isLocalForkFailure 判断错误是否为**本地进程创建失败**（exec 一侧的系统错误）。
+//
+// 这类失败与上游 MySQL 无关，stderr 必为空，旧实现会把它们统一落成
+// 「mysql 客户端无错误输出」，把宿主问题误报成数据库故障。已实证的 errno：
+//   - ETXTBSY（text file busy）：测试夹具写完假客户端脚本立刻被并发 exec，
+//     写端 fd 尚未在 fork 出来的子进程里关闭时 exec 同一 inode → 立即失败。
+//     2026-11-24 第 15 段偶发 FAIL 的真身即此（原文见 CHANGELOG 0.5.1）；
+//   - EAGAIN / EMFILE / ENFILE / ENOMEM / EINTR：宿主 fork 预算瞬时耗尽。
+//
+// ENOENT / EACCES 由 exec.Error 分支（LookPath 失败）先行处理，不走这里。
+func isLocalForkFailure(err error) bool {
+	var pathErr *os.PathError
+	return errors.As(err, &pathErr) && pathErr.Op == "fork/exec"
+}
+
 // execError 把客户端启动/执行失败映射为协议错误；stderr 先脱敏再截断。
 func (c *Client) execError(err error, password, stderr string) *OpError {
 	var execErr *exec.Error
 	if errors.As(err, &execErr) {
 		return opErrorf(pluginapi.E_UNSUPPORTED,
 			"无法执行 mysql 客户端 %q：请安装 mysql/mariadb 客户端，或用 %s 指定绝对路径", c.bin, EnvBin)
+	}
+	// fork/exec 系统错误（EAGAIN / EMFILE / ENOMEM）是**本地进程创建**失败，不是上游
+	// MySQL 失败。这类错误 stderr 必为空，旧实现只带 stderr → 落成「mysql 客户端无错误
+	// 输出」，把本机 fork 预算耗尽误报成上游故障（运维会去查数据库，真凶在宿主）。
+	// 带出 errno：诊断能区分「本地进程创建失败（ETXTBSY/EAGAIN…）」与「被测路径真失败」，
+	// 并发用例也据此只对本地创建错误重试（断言强度不变）。
+	if isLocalForkFailure(err) {
+		return opErrorf(pluginapi.E_UPSTREAM, "本地进程创建失败（%s）: %v", c.bin, err)
 	}
 	return &OpError{
 		Code:    pluginapi.E_UPSTREAM,

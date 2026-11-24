@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.1 (2026-11-24)
+
+- fix: `execError` 不再把**本地进程创建失败**误报成「上游 MySQL 失败且无错误输出」。`fork/exec` 返回 `ETXTBSY`（text file busy）/`EAGAIN`/`EMFILE`/`ENFILE`/`ENOMEM`/`EINTR` 时，旧实现只带 stderr（这类错误 stderr 必为空）→ 落成 `E_UPSTREAM: mysql 客户端失败: mysql 客户端无错误输出`，把宿主进程创建失败误导成数据库故障；现按 `*os.PathError{Op:"fork/exec"}` 识别，message 带出 `errno`（`本地进程创建失败（<bin>）: fork/exec ...`），错误码仍为 `E_UPSTREAM`（可重试语义不变，不破坏下游映射）
+- test: 并发边界用例加**相对 fork 预算**——`runConcurrent` 每个调用受 `forkGate` 限流，预算按 `GOMAXPROCS` 相对推导并夹在 `[4,8]`（不写死绝对数字，同 `4aae07a` 的 fd 预算教训）；仅对「本地进程创建失败」做 5 次退避重试。**断言一条未放宽**：其他任何错误立即判 FAIL，最终仍要求全部成功
+- fix(flaky): 消除 `TestConcurrentCreateDropDatabase` 偶发 FAIL。根因不是并发建库/删库有 Bug：多路 `go test` 并发时宿主 `fork` 预算紧张，`fork/exec` 假客户端脚本返回 `ETXTBSY`（text file busy）/`EAGAIN`，被上面的 `execError` 缺陷伪装成「上游无输出」。复现证据：8 路 `go test ./tests/boundary/` 并发压测，失败原文 `建库 kore_b_07_00 失败: E_UPSTREAM: mysql 客户端失败: mysql 客户端无错误输出`；加临时诊断后抓到真身 `*fs.PathError: fork/exec /tmp/.../mysql: text file busy`。单进程 `-count=30` 全绿 → 只在多进程压测下暴露
+- test: `TestConcurrentChangePassword` 同样接入 `runOne` 的 fork 限流与退避重试（此前漏接，压测下仍会命中 ETXTBSY）
+- 已知剩余（同一归因缺陷的插件侧）：压测下 `TestConcurrentInstanceProbes` 仍可能以 `Reachable:false` 暴露——`Client.Instances` 把本地进程创建失败降级成「实例不可达」，而不是返回错误；待按 `execError` 的区分口径在探测路径上单独修（不在本次 flaky 用例范围）
+- chore: 版本 0.5.0 → 0.5.1（fix = patch），`info.json` / `manifest.json` 同步；仅测试与错误归因改动，不进 dist 产物行为
+
 ## 0.5.0 (2026-11-24)
 
 - feat: 新增写语句方法 `db-mysql.exec`（`system:admin`）——把「数据库管理」从只读查询补齐到可改数据/结构：入参 `{instance, sql, confirm, confirm_text?}`，返回 `{instance, kind, executed, columns, rows, row_count}`

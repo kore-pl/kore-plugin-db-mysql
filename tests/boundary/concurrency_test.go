@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pengtang1024/kore-plugin-db-mysql/internal/mysqlop"
+	"github.com/pengtang1024/kore/pkg/pluginapi"
 )
 
 // 并发用例使用真实并发（多 goroutine 同时走 mysqlop.Call → os/exec 子进程），
@@ -141,10 +144,20 @@ func TestConcurrentChangePassword(t *testing.T) {
 				params := fmt.Sprintf(
 					`{"instance":"primary","user":%q,"host":"localhost","password":%q}`,
 					user, password)
-				raw, perr := mysqlop.Call("db-mysql.changePassword", json.RawMessage(params), cfg, nil)
+				var raw json.RawMessage
+				var perr *pluginapi.Error
+				// 与 runConcurrent 同口径：只对宿主 fork/exec 瞬时失败退避重试，
+				// 断言强度不变（真失败照样进 result.err 判 FAIL）。
+				callErr := runOne(func() error {
+					raw, perr = mysqlop.Call("db-mysql.changePassword", json.RawMessage(params), cfg, nil)
+					if perr != nil {
+						return fmt.Errorf("%s", perr.Message)
+					}
+					return nil
+				})
 				result := outcome{password: password, raw: string(raw)}
-				if perr != nil {
-					result.err = perr.Message
+				if callErr != nil {
+					result.err = callErr.Error()
 				}
 				outcomes <- result
 			}
@@ -220,6 +233,63 @@ func TestConcurrentInstanceProbes(t *testing.T) {
 	})
 }
 
+// forkGate 限制「同时进入真实 fork/exec」的调用数。
+//
+// 为什么需要：本文件的并发用例各自 6–16 个 goroutine，每个 goroutine 都真实
+// os/exec 一个假客户端，假客户端本身还会 fork shell 内建（tr / cat / sed）。
+// 4 个用例都用 t.Parallel()，叠加后瞬时进程创建可达数百；宿主 fork 预算被占满时
+// 立即返回 EAGAIN，插件如实报 E_UPSTREAM「本地进程创建失败」，用例却把它误判成
+// 「并发建库/删库有 Bug」——2026-11-24 第 15 段那次偶发 FAIL 的真身就是它
+// （原文：建库 kore_b_07_00 失败: E_UPSTREAM: mysql 客户端失败: mysql 客户端无错误输出；
+//
+//	多实例并发压测可稳定复现 1/24，见提交说明）。
+//
+// 预算按本机并行度相对推导（不写死绝对数字，正对 4aae07a 的教训：绝对 fd/进程预算
+// 在 -race 与不同宿主继承环境下是错的）。只限**峰值**，不减少总操作数，断言强度不变。
+var forkGate = make(chan struct{}, forkBudget())
+
+// forkBudget 返回并发 fork 峰值上限：相对 GOMAXPROCS，夹在 [4, 8]。
+func forkBudget() int {
+	n := runtime.GOMAXPROCS(0)
+	if n > 8 {
+		n = 8
+	}
+	if n < 4 {
+		n = 4
+	}
+	return n
+}
+
+// forkRetryAttempts 是对「宿主 fork 预算瞬时不足」的退避重试次数。
+// 只对这种错误重试：EAGAIN 是瞬时的，一批 goroutine 退出后即可用；
+// 被测代码的真实失败（参数错、上游报错、结果不对）会在首次就返回，不被掩盖。
+const forkRetryAttempts = 5
+
+// isLocalForkFailure 判断错误是否来自宿主 fork/exec 资源瞬时不足。
+// 插件侧把这类失败标注为「本地进程创建失败」并带出 errno（internal/mysqlop/client.go），
+// 与「上游 MySQL 报错」可区分。
+func isLocalForkFailure(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "本地进程创建失败")
+}
+
+// runOne 在 forkGate 预算内执行 fn；仅当失败是宿主 fork 预算瞬时不足时退避重试。
+// 其他任何错误立即返回——不放宽断言，真失败照样判 FAIL。
+func runOne(fn func() error) error {
+	var err error
+	for attempt := 0; attempt < forkRetryAttempts; attempt++ {
+		err = func() error {
+			forkGate <- struct{}{}
+			defer func() { <-forkGate }()
+			return fn()
+		}()
+		if !isLocalForkFailure(err) {
+			return err
+		}
+		time.Sleep(time.Duration(attempt+1) * 10 * time.Millisecond)
+	}
+	return err
+}
+
 // runConcurrent 并发执行 fn(worker, round)，汇总所有错误后统一报告。
 func runConcurrent(t *testing.T, workers, rounds int, fn func(worker, round int) error) {
 	t.Helper()
@@ -230,7 +300,7 @@ func runConcurrent(t *testing.T, workers, rounds int, fn func(worker, round int)
 		go func(worker int) {
 			defer wg.Done()
 			for i := 0; i < rounds; i++ {
-				if err := fn(worker, i); err != nil {
+				if err := runOne(func() error { return fn(worker, i) }); err != nil {
 					errs <- err
 				}
 			}
