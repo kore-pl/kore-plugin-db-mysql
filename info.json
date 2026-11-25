@@ -1,7 +1,7 @@
 {
   "id": "db-mysql",
   "name": "MySQL/MariaDB 管理插件",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "protocol": "kore.plugin.v1",
   "lifecycle": "lazy",
   "depth_level": "production",
@@ -41,5 +41,5 @@
   "scenario_tags": [
     "data"
   ],
-  "size_bytes": 1581023
+  "size_bytes": 1581026
 }
