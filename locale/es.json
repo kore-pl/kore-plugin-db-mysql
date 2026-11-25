@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Complemento de gestión MySQL/MariaDB",
+    "description": "Este complemento sondea realmente instancias MySQL/MariaDB, lista bases de datos, ejecuta consultas de solo lectura y lee estados clave; desde L2 añade gestión diaria: crear/borrar base de datos, crear/borrar usuario, permisos, exportar/importar. No incluye ningún driver de MySQL ni binarios mysql/mysqldump (G-17): invoca `mysql` / `mysqldump` del host mediante `os/exec` y solo depende de `kore/pkg/pluginapi`. Si falta el cliente devuelve `E_UNSUPPORTED`, sin degradación silenciosa.",
+    "detail": "docs/DETAIL.es.md"
+  }
+}

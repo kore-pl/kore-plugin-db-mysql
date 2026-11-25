@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Plugin de gerenciamento MySQL/MariaDB",
+    "description": "Este plugin sonda realmente instâncias MySQL/MariaDB, lista bancos, executa consultas somente leitura e lê estados importantes; a partir do L2 acrescenta gerenciamento diário — criar/excluir banco, criar/excluir usuário, permissões, exportar/importar. Não inclui driver MySQL nem binários mysql/mysqldump (G-17): chama `mysql` / `mysqldump` do host via `os/exec` e depende apenas de `kore/pkg/pluginapi`. Cliente ausente retorna `E_UNSUPPORTED`, sem degradação silenciosa.",
+    "detail": "docs/DETAIL.pt.md"
+  }
+}

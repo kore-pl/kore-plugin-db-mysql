@@ -1,5 +1,7 @@
 # kore-plugin-db-mysql
 
+语言：[简体中文](docs/DETAIL.md) · [English](docs/DETAIL.en.md) · [Español](docs/DETAIL.es.md) · [Français](docs/DETAIL.fr.md) · [Deutsch](docs/DETAIL.de.md) · [Русский](docs/DETAIL.ru.md) · [Português](docs/DETAIL.pt.md)
+
 MySQL/MariaDB 管理插件：真实探测实例、列库、执行只读查询、读取关键状态；L2 起提供日常管理——建库/删库、建用户/删用户、授权、导入导出。**不引入任何 MySQL driver、不内置 mysql/mysqldump 客户端二进制**（G-17）：通过 `os/exec` 调用宿主机上的 `mysql` / `mysqldump`，插件只依赖 `kore/pkg/pluginapi`。
 
 ## 定位与边界
@@ -202,3 +204,7 @@ docker rm -f kore-mysql-test
 - **相关仓库**：[索引 kore-plugins](https://github.com/kore-pl/kore-plugins) · [协议文档](https://github.com/kore-pl/kore/blob/main/docs/PLUGIN-PROTOCOL.md) · [SDK 指南](https://github.com/kore-pl/kore/blob/main/docs/PLUGIN-SDK.md)
 
 <!-- oss:end -->
+
+## 支持本项目
+
+如果这个项目对你有帮助，欢迎在 GitHub 仓库右上角点个 ⭐ Star——你的支持是作者持续维护的动力。也欢迎提 issue、PR 或参与讨论。

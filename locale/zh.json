@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "MySQL/MariaDB 管理插件",
+    "description": "本插件真实探测 MySQL/MariaDB 实例、列库、执行只读查询、读取关键状态；L2 起提供日常管理——建库/删库、建用户/删用户、授权、导入导出。不引入任何 MySQL driver、不内置 mysql/mysqldump 客户端二进制（G-17）：通过 `os/exec` 调用宿主机的 `mysql` / `mysqldump`，插件只依赖 `kore/pkg/pluginapi`。客户端缺失返回 `E_UNSUPPORTED`，不静默降级。",
+    "detail": "docs/DETAIL.md"
+  }
+}

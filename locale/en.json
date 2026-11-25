@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "MySQL/MariaDB management plugin",
+    "description": "This plugin really probes MySQL/MariaDB instances, lists databases, runs read-only queries and reads key status; from L2 it adds daily management — create/drop database, create/drop user, grants, export/import. It brings no MySQL driver and bundles no mysql/mysqldump binaries (G-17): it calls the host’s `mysql` / `mysqldump` via `os/exec`, depending only on `kore/pkg/pluginapi`. A missing client returns `E_UNSUPPORTED`, with no silent fallback.",
+    "detail": "docs/DETAIL.en.md"
+  }
+}

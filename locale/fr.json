@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Plugin de gestion MySQL/MariaDB",
+    "description": "Ce plugin sonde réellement les instances MySQL/MariaDB, liste les bases, exécute des requêtes en lecture seule et lit les états clés ; depuis L2, il ajoute la gestion courante : créer/supprimer une base, créer/supprimer un utilisateur, les privilèges, l’export/import. Il n’embarque aucun driver MySQL ni binaire mysql/mysqldump (G-17) : il appelle `mysql` / `mysqldump` de l’hôte via `os/exec` et ne dépend que de `kore/pkg/pluginapi`. Un client absent renvoie `E_UNSUPPORTED`, sans repli silencieux.",
+    "detail": "docs/DETAIL.fr.md"
+  }
+}

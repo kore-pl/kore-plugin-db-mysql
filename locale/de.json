@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Plugin zur MySQL/MariaDB-Verwaltung",
+    "description": "Dieses Plugin untersucht tatsächlich MySQL/MariaDB-Instanzen, listet Datenbanken, führt schreibgeschützte Abfragen aus und liest wichtige Statuswerte; ab L2 kommen tägliche Verwaltungsaufgaben hinzu — Datenbank/Benutzer anlegen/löschen, Berechtigungen, Export/Import. Es bringt keinen MySQL-Treiber und keine mysql/mysqldump-Binaries mit (G-17): es ruft `mysql` / `mysqldump` des Hosts über `os/exec` auf und hängt nur von `kore/pkg/pluginapi` ab. Ein fehlender Client liefert `E_UNSUPPORTED`, ohne stille Herabstufung.",
+    "detail": "docs/DETAIL.de.md"
+  }
+}
