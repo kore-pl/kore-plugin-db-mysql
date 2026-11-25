@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3 (2026-11-25)
+
+- docs(l10n): 新增 zh/en/es/fr/de/ru/pt 七语 locale 与 docs/DETAIL 文档，README 顶部加语言切换行（无日语、无 ja 文件）
+- docs(oss): 补齐 .github/dependabot.yml（npm + github-actions weekly）、.github/CODEOWNERS、SECURITY.en.md 忠实译文
+- docs(wiki): 落盘六页 wiki 源文档；CONTRIBUTING 补 Git Flow 分支模型与 SSH 签名约定；README 增加中文 star 提示
+
 ## 0.5.2 (2026-11-24)
 
 - fix: `Client.Instances` 不再把**本地进程创建失败**降级成「实例不可达」。旧实现把所有探测错误一律写成 per-instance `{reachable:false, error:"…"}`——运维看到 `reachable:false` 会去查网络 / 防火墙 / 端口，而真凶是宿主 `fork` 预算（ETXTBSY / EAGAIN / EMFILE / ENFILE / ENOMEM / EINTR）。现按归因分流：本地 `fork/exec` 失败（`*os.PathError{Op:"fork/exec"}`，复用 0.5.1 的 `isLocalForkFailure`）→ **整个 `db-mysql.instances` 返回错误**，错误码 `E_UPSTREAM`（可重试语义不变），且**不返回半张表**——半张表同样会被读成「实例不可达」
